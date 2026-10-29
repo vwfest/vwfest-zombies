@@ -1,0 +1,8 @@
+{
+  "name": "vwfest-zombies",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DUST & DEAD: a 3D wave-survival zombie shooter in an air-cooled VW junkyard ($VWFEST). Three.js, no server.",
+  "scripts": { "build": "node build.cjs", "test": "node test/e2e.cjs", "serve": "python3 -m http.server 8099" },
+  "devDependencies": { "esbuild": "^0.28.2", "playwright": "^1.64.1", "three": "^0.186.1" }
+}

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#05080c">
+<title>DUST &amp; DEAD — $VWFEST Junkyard Survival</title>
+<meta name="description" content="A free 3D first-person zombie wave-survival shooter set in an air-cooled VW junkyard. Plays in your browser on desktop and phone.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%2305080c' stroke='%2318ffb0' stroke-width='4'/%3E%3Cpath d='M16 22l8 24 8-16 8 16 8-24' fill='none' stroke='%2318ffb0' stroke-width='5' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="fx-vignette"></div><div id="fx-damage"></div><div id="fx-flash"></div><div id="fx-dir"><i></i></div>
+
+<div id="hud" class="hidden">
+  <div id="roundBox" class="glass"><span class="lbl">ROUND</span><b id="roundNum">1</b></div>
+  <div id="powers"></div>
+  <div id="topRight"><button id="btnMute" class="icon" aria-label="Mute">🔊</button><button id="btnPause" class="icon" aria-label="Pause">❚❚</button></div>
+  <div id="cross"><i class="l"></i><i class="r"></i><i class="u"></i><i class="d"></i><i class="dot"></i><div id="hitm"><i></i><i></i><i></i><i></i></div></div>
+  <div id="prompt" class="glass"></div>
+  <div id="banner"></div>
+  <div id="toast"></div>
+  <div id="pop"></div>
+  <div id="statL" class="glass"><div class="hp"><span>HEALTH</span><div class="bar"><i id="hpFill"></i></div></div><div class="pts"><span>POINTS</span><b id="pts">500</b></div></div>
+  <div id="statR" class="glass"><div id="wName">Dustdevil .45</div><div class="ammo"><b id="ammoMag">12</b><span id="ammoRes">/ 60</span></div><div id="wAlt"></div><div id="reloadBar"><i></i></div></div>
+</div>
+
+<div id="touch" class="hidden">
+  <div id="stick"><div id="knob"></div></div>
+  <button id="bFire" aria-label="Fire"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>
+  <button id="bReload" aria-label="Reload">R</button>
+  <button id="bUse" aria-label="Interact">E</button>
+  <button id="bSwap" aria-label="Swap weapon">⇄</button>
+</div>
+
+<section id="menu" class="screen">
+  <div class="panel glass">
+    <div class="eyebrow">$VWFEST · AIR-COOLED SALVAGE YARD</div>
+    <h1>DUST <span>&amp;</span> DEAD</h1>
+    <p class="tag">Hold the junkyard. Board the windows. Buy bigger guns. Survive the next round.</p>
+    <button id="btnPlay" class="primary">PLAY</button>
+    <div class="row">
+      <div class="seg" id="qSeg" role="group" aria-label="Graphics quality"><span class="k">GRAPHICS</span><button data-q="auto" class="on">Auto</button><button data-q="high">High</button><button data-q="medium">Medium</button><button data-q="low">Low</button></div>
+      <button id="btnMute2" class="ghost">🔊 Sound on</button>
+    </div>
+    <div class="cols">
+      <div class="how" id="howDesk"><h3>CONTROLS</h3><ul><li><kbd>W A S D</kbd> move · <kbd>Shift</kbd> sprint</li><li><kbd>Mouse</kbd> aim · <kbd>Click</kbd> fire</li><li><kbd>R</kbd> reload · <kbd>E</kbd> buy / repair (hold)</li><li><kbd>1</kbd> <kbd>2</kbd> <kbd>Q</kbd> swap · <kbd>F</kbd> flashlight</li><li><kbd>M</kbd> mute · <kbd>Esc</kbd> pause</li></ul></div>
+      <div class="how" id="howTouch"><h3>TOUCH</h3><ul><li>Left thumb: move stick</li><li>Right side: drag to look</li><li>Big button fire · <b>R</b> reload · <b>E</b> use · ⇄ swap</li><li>Landscape works best</li></ul></div>
+      <div class="how"><h3>TIPS</h3><ul><li>Hold <b>E</b> at a window to nail planks back</li><li>Headshots pay double</li><li>Open the gate for new guns</li><li>Gather drops: <b>2× Cash</b>, <b>Full Mags</b>, <b>Kaboom</b></li></ul></div>
+      <div class="how scores"><h3>BEST ROUNDS</h3><ol id="scoreList"></ol></div>
+    </div>
+  </div>
+  <div class="foot">Original game · Three.js · plays offline in your browser</div>
+</section>
+
+<section id="pause" class="screen hidden"><div class="panel glass small"><h2>PAUSED</h2><button id="btnResume" class="primary">RESUME</button><button id="btnQuit" class="ghost">Quit to menu</button></div></section>
+
+<section id="over" class="screen hidden">
+  <div class="panel glass">
+    <div class="eyebrow red">YOU HAVE FALLEN</div>
+    <h1 class="big">ROUND <span id="oRound">1</span></h1>
+    <p class="tag" id="oMsg"></p>
+    <div class="stats"><div><b id="oKills">0</b><span>KILLS</span></div><div><b id="oHeads">0</b><span>HEADSHOTS</span></div><div><b id="oPts">0</b><span>POINTS</span></div><div><b id="oTime">0:00</b><span>SURVIVED</span></div></div>
+    <ol id="oScores" class="scoreList"></ol>
+    <div class="row"><button id="btnAgain" class="primary">PLAY AGAIN</button><button id="btnMenu" class="ghost">Menu</button></div>
+  </div>
+</section>
+
+<div id="loading"><div class="spin"></div><span>Loading junkyard…</span></div>
+<script src="game.js"></script>
+</body>
+</html>
