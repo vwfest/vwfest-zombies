@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { rnd, pick, clamp, TAU } from './util.js';
 import { areaOf, DOOR_Z } from './world.js';
+import { ZOMBIE_DMG, BRUTE_DMG } from './balance.js';
 
 const G = {
   torso: new THREE.BoxGeometry(0.52, 0.62, 0.3), hip: new THREE.BoxGeometry(0.46, 0.2, 0.28), leg: new THREE.BoxGeometry(0.2, 0.9, 0.22), arm: new THREE.BoxGeometry(0.15, 0.62, 0.16),
@@ -44,7 +45,7 @@ export class Zombies {
     const z = this.list.find((q) => q.state === 'dead' && !q.root.visible); if (!z) return null;
     const st = this.stats(round); const runner = round >= 3 && Math.random() < Math.min(0.55, (round - 2) * 0.09);
     z.brute = brute; z.scale = brute ? 1.38 : rnd(0.94, 1.06); z.root.scale.setScalar(z.scale);
-    z.maxHp = z.hp = st.hp * (brute ? 3.3 : 1); z.speed = st.sp * rnd(0.82, 1.12) * (runner ? 1.45 : 1) * (brute ? 0.78 : 1); z.speed = Math.min(z.speed, 6.0); z.runner = runner; z.dmg = brute ? 75 : 50; z.value = brute ? 150 : 60;
+    z.maxHp = z.hp = st.hp * (brute ? 3.3 : 1); z.speed = st.sp * rnd(0.82, 1.12) * (runner ? 1.45 : 1) * (brute ? 0.78 : 1); z.speed = Math.min(z.speed, 6.0); z.runner = runner; z.dmg = brute ? BRUTE_DMG : ZOMBIE_DMG; z.value = brute ? 150 : 60;
     z.sk.color.setHex(brute ? 0x9a6f5a : pick(SKINS)); z.sh.color.setHex(pick(SHIRTS)); z.pa.color.setHex(pick(PANTS));
     for (const m of [z.sk, z.sh, z.pa]) m.emissive.setHex(0);
     z.win = w; z.state = 'approach'; z.slot = rnd(-1.2, 1.2); z.phase = rnd(TAU); z.attackT = 0; z.cool = 0; z.stuck = 0; z.stuckTot = 0; z.side = 1; z.flash = 0; z.hitT = 0; z.groanT = rnd(1, 4); z.dieT = 0; z.climbT = 0; z.chk = 0; z.chkX = 0; z.chkZ = 0; z.limp = Math.random() < 0.3;

@@ -64,6 +64,7 @@ export class Sound {
   door() { if (!this.ok) return; const t = this.ctx.currentTime, o = this.out(0, 0.5); this.nz(t, 2.2, 'lowpass', 900, 150, 0.7, o, 1); this.tone(t, 2.2, 'sawtooth', 55, 42, 0.2, o, 0.3); for (let i = 0; i < 5; i++) this.click(0.2 + i * 0.35, 700 + i * 120, 0.7); this.nz(t + 2.0, 0.4, 'lowpass', 400, 60, 0.9, o); }
   boom() { if (!this.ok) return; const t = this.ctx.currentTime, o = this.out(0, 0.7); this.nz(t, 2.4, 'lowpass', 2400, 50, 1.4, o, 0.7); this.tone(t, 1.6, 'sine', 90, 24, 1.3, o); this.tone(t + 0.05, 0.8, 'sawtooth', 50, 25, 0.3, o); }
   power(kind) { if (!this.ok) return; const t = this.ctx.currentTime, o = this.out(0, 0.4); const base = kind === 'nuke' ? [220, 277, 330, 440] : kind === 'double' ? [392, 494, 587, 784] : [330, 440, 554, 659]; base.forEach((f, i) => { this.tone(t + i * 0.07, 0.4, 'triangle', f, f, 0.2, o); this.tone(t + i * 0.07, 0.4, 'sine', f * 2, f * 2, 0.08, o); }); }
+  medkit() { if (!this.ok) return; const t = this.ctx.currentTime, o = this.out(0, 0.5); [523, 659, 784, 1047].forEach((f, i) => { this.tone(t + i * 0.08, 0.5, 'sine', f, f, 0.2, o); this.tone(t + i * 0.08, 0.5, 'triangle', f * 2, f * 2, 0.05, o); }); this.tone(t, 0.9, 'sine', 300, 600, 0.12, o, 0.1); }
   spawnPower() { if (!this.ok) return; const t = this.ctx.currentTime, o = this.out(0, 0.5); this.tone(t, 0.7, 'sine', 600, 1200, 0.25, o, 0.05); this.tone(t + 0.1, 0.7, 'sine', 900, 1800, 0.12, o, 0.05); }
   round(n) {
     if (!this.ok) return; const c = this.ctx, t = c.currentTime, o = this.out(0, 0.8);
