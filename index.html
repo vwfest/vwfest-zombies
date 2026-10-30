@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://race.vwfestmemecoin.com; font-src 'self' data:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="theme-color" content="#05080c">
 <title>DUST &amp; DEAD — $VWFEST Junkyard Survival</title>
 <meta name="description" content="A free 3D first-person zombie wave-survival shooter set in an air-cooled VW junkyard. Plays in your browser on desktop and phone.">
@@ -49,6 +51,7 @@
       <div class="how" id="howTouch"><h3>TOUCH</h3><ul><li>Left thumb: move stick</li><li>Right side: drag to look</li><li>Big button fire · <b>R</b> reload · <b>E</b> use · ⇄ swap</li><li>Landscape works best</li></ul></div>
       <div class="how"><h3>TIPS</h3><ul><li>Hold <b>E</b> at a window to nail planks back</li><li>Headshots pay double</li><li>Open the gate for new guns</li><li>Gather drops: <b>2× Cash</b>, <b>Full Mags</b>, <b>Kaboom</b></li></ul></div>
       <div class="how scores"><h3>BEST ROUNDS</h3><ol id="scoreList"></ol></div>
+      <div class="how scores globalBox"><h3>GLOBAL SURVIVORS</h3><ol id="globalList" class="scoreList"><li class="muted">Loading…</li></ol></div>
     </div>
   </div>
   <div class="foot">Original game · Three.js · plays offline in your browser</div>
@@ -63,6 +66,9 @@
     <p class="tag" id="oMsg"></p>
     <div class="stats"><div><b id="oKills">0</b><span>KILLS</span></div><div><b id="oHeads">0</b><span>HEADSHOTS</span></div><div><b id="oPts">0</b><span>POINTS</span></div><div><b id="oTime">0:00</b><span>SURVIVED</span></div></div>
     <ol id="oScores" class="scoreList"></ol>
+    <form id="fPost" class="postform hidden" autocomplete="off"><label for="nick">Post to the global board (nickname only, no account)</label><div class="row"><input id="nick" maxlength="16" minlength="3" pattern="[A-Za-z0-9_\- .]{3,16}" placeholder="BugLife209" required><button id="bPost" class="ghost" type="submit">POST SCORE</button></div></form>
+    <p id="postMsg" class="postMsg"></p>
+    <div class="how scores globalBox"><h3>GLOBAL SURVIVORS</h3><ol id="oGlobal" class="scoreList"></ol></div>
     <div class="row"><button id="btnAgain" class="primary">PLAY AGAIN</button><button id="btnMenu" class="ghost">Menu</button></div>
   </div>
 </section>

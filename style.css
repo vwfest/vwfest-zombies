@@ -128,3 +128,14 @@ kbd{background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.2);borde
 .hpl{display:flex;justify-content:space-between;align-items:baseline}#hpNum{font-size:13px;font-weight:800;color:#cfe6ee;font-variant-numeric:tabular-nums}
 #medCue{font-size:10px;letter-spacing:.14em;font-weight:700;color:#4dffb0;text-transform:uppercase;max-height:0;opacity:0;overflow:hidden;transition:opacity .3s,max-height .3s;text-shadow:0 0 10px rgba(77,255,176,.6)}
 #medCue.on{opacity:.9;max-height:18px;animation:medpulse 1.6s ease-in-out infinite}@keyframes medpulse{50%{opacity:.45}}
+
+/* shared leaderboard */
+.muted{color:#7d8e98;list-style:none}
+.postform label{display:block;font-size:11px;letter-spacing:.12em;color:#9fb2bb;margin:10px 0 4px}
+.postform input{background:rgba(255,255,255,.06);color:#fff;border:1px solid var(--bd);border-radius:10px;padding:10px 12px;font-size:16px;width:170px;font-family:inherit}
+.postMsg{min-height:1.2em;font-size:13px;color:#ff9aa6;margin:6px 0 0}.postMsg.ok{color:var(--acc)}
+.scoreList li.me{color:var(--acc)}
+.globalBox{margin-top:10px;text-align:left}
+#over .globalBox{max-width:420px;margin-left:auto;margin-right:auto}
+.hidden{display:none!important}
+@media(max-height:640px){#over .globalBox{display:none}}

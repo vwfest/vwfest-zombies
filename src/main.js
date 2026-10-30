@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { lb } from './lb.js';
 import { makeTextures, rnd, pick, clamp, lerp, TAU } from './util.js';
 import { World, areaOf, DOOR_Z } from './world.js';
 import { Zombies } from './zombie.js';
@@ -291,7 +292,20 @@ function die() { P.hp = 0; P.dead = true; P.deadT = 0; sfx.over(); input.fire = 
 /* ---------------- scores ---------------- */
 function loadScores() { try { return JSON.parse(localStorage.getItem('vwz_scores') || '[]'); } catch (e) { return []; } }
 function saveScore(r) { const a = loadScores(); a.push(r); a.sort((x, y) => y.round - x.round || y.pts - x.pts); try { localStorage.setItem('vwz_scores', JSON.stringify(a.slice(0, 5))); } catch (e) {} return a.slice(0, 5); }
-function renderScores(el, list) { el.innerHTML = list.length ? list.map((s, i) => `<li>Round <b>${s.round}</b> · ${s.kills} kills · ${s.pts.toLocaleString()} pts</li>`).join('') : '<li style="list-style:none;color:#7d8e98">No runs yet — be the first.</li>'; }
+let lastRun = null;
+function refreshGlobal() { lb.top().then((rows) => { lb.render($('globalList'), rows, localStorage.getItem('vwfest_nick')); lb.render($('oGlobal'), rows, localStorage.getItem('vwfest_nick')); }); }
+function setupPost() {
+  lastRun = { round: Math.max(1, G.round), pts: P.pts, kills: P.kills }; $('nick').value = localStorage.getItem('vwfest_nick') || ''; $('postMsg').textContent = ''; $('postMsg').className = 'postMsg';
+  $('fPost').classList.toggle('hidden', !lb.hasToken()); $('bPost').disabled = false; if (!lb.hasToken()) { $('postMsg').textContent = 'Leaderboard offline: score saved on this device.'; } refreshGlobal();
+}
+$('fPost').onsubmit = (e) => {
+  e.preventDefault(); if (!lastRun) return; const nick = $('nick').value.trim(); $('bPost').disabled = true; try { localStorage.setItem('vwfest_nick', nick); } catch (err) {}
+  lb.submit(nick, lastRun.round, lastRun.pts, lastRun.kills).then((j) => {
+    if (j.ok) { $('fPost').classList.add('hidden'); $('postMsg').className = 'postMsg ok'; $('postMsg').textContent = 'Posted! You are #' + j.rank + ' on the survivor board.'; lb.render($('oGlobal'), j.top, nick); lb.render($('globalList'), j.top, nick); }
+    else { $('postMsg').textContent = j.error || 'Could not post.'; $('bPost').disabled = false; }
+  });
+};
+function renderScores(el, list) { el.innerHTML = list.length ? list.map((s, i) => `<li>Round <b>${s.round}</b> · ${s.kills} kills · ${s.pts.toLocaleString()} pts</li>`).join('') : '<li class="muted">No runs yet — be the first.</li>'; }
 
 /* ---------------- game flow ---------------- */
 function newGame() {
@@ -304,18 +318,18 @@ function newGame() {
   showGun();
 }
 function startGame() {
-  sfx.init(); newGame(); G.state = 'playing'; showGun(); ['menu', 'over', 'pause'].forEach((i) => $(i).classList.add('hidden')); $('hud').classList.remove('hidden'); $('touch').classList.toggle('hidden', !isTouch);
+  sfx.init(); newGame(); lb.start(); G.state = 'playing'; showGun(); ['menu', 'over', 'pause'].forEach((i) => $(i).classList.add('hidden')); $('hud').classList.remove('hidden'); $('touch').classList.toggle('hidden', !isTouch);
   beam.visible = tier > 0 && P.flashlight; adaptGrace = 3; fpsAcc = 0; fpsN = 0;
   if (!isTouch && !qs.has('test')) { try { const r = canvas.requestPointerLock?.(); r?.catch?.(() => {}); } catch (e) {} } else if (isTouch) { try { document.documentElement.requestFullscreen?.().catch(() => {}); screen.orientation?.lock?.('landscape').catch(() => {}); } catch (e) {} }
   toast(isTouch ? 'Hold E at windows to repair · Open the gate for new guns' : 'Hold E at windows to repair · Open the gate for new guns');
 }
 function pause() { if (G.state !== 'playing' || P.dead) return; G.state = 'paused'; $('pause').classList.remove('hidden'); input.fire = false; input.f = input.s = 0; if (document.pointerLockElement) document.exitPointerLock?.(); setPrompt(''); }
 function resume() { if (G.state !== 'paused') return; G.state = 'playing'; $('pause').classList.add('hidden'); sfx.init(); if (!isTouch && !qs.has('test')) { try { canvas.requestPointerLock?.()?.catch?.(() => {}); } catch (e) {} } }
-function toMenu() { G.state = 'menu'; ['pause', 'over'].forEach((i) => $(i).classList.add('hidden')); $('menu').classList.remove('hidden'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); renderScores($('scoreList'), loadScores()); zombies.reset(); if (P.gun) P.gun.visible = false; setPrompt(''); P.dead = false; flashSprite.visible = false; }
+function toMenu() { G.state = 'menu'; ['pause', 'over'].forEach((i) => $(i).classList.add('hidden')); $('menu').classList.remove('hidden'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); renderScores($('scoreList'), loadScores()); refreshGlobal(); zombies.reset(); if (P.gun) P.gun.visible = false; setPrompt(''); P.dead = false; flashSprite.visible = false; }
 function gameOver() {
   G.state = 'over'; const list = saveScore({ round: Math.max(1, G.round), kills: P.kills, pts: P.pts, t: Date.now() });
   $('oRound').textContent = Math.max(1, G.round); $('oKills').textContent = P.kills; $('oHeads').textContent = P.heads; $('oPts').textContent = P.pts.toLocaleString(); const s = Math.floor(G.runTime); $('oTime').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
-  $('oMsg').textContent = G.round >= 10 ? 'Legendary run. The yard remembers.' : G.round >= 5 ? 'Solid stand. They got you in the end.' : 'The dead took the yard. Try again.'; renderScores($('oScores'), list);
+  $('oMsg').textContent = G.round >= 10 ? 'Legendary run. The yard remembers.' : G.round >= 5 ? 'Solid stand. They got you in the end.' : 'The dead took the yard. Try again.'; renderScores($('oScores'), list); setupPost();
   $('over').classList.remove('hidden'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); if (P.gun) P.gun.visible = false;
 }
 
@@ -367,7 +381,7 @@ function renderOnce() { post.render(0.016, G.time, clamp(P.dmg, 0, 1), 0); }
 /* ---------------- input ---------------- */
 const keys = {};
 function updateAxes() { input.f = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0); input.s = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0); input.sprint = !!(keys.ShiftLeft || keys.ShiftRight); }
-addEventListener('keydown', (e) => {
+addEventListener('keydown', (e) => { if (e.target && e.target.tagName === 'INPUT') return;
   if (e.repeat) return; keys[e.code] = true; if (G.state === 'playing' && !P.dead) {
     if (e.code === 'KeyR') input.reload = true; if (e.code === 'KeyE') { input.interact = true; input.interactEdge = true; } if (e.code === 'Digit1') switchTo(0); if (e.code === 'Digit2') switchTo(1); if (e.code === 'KeyQ') switchTo(1 - P.cur); if (e.code === 'KeyF') { P.flashlight = !P.flashlight; spot.visible = P.flashlight; beam.visible = tier > 0 && P.flashlight; sfx.click(0, 1200, 0.4); } if (e.code === 'KeyP') pause();
   } else if (G.state === 'paused' && e.code === 'KeyP') resume();
@@ -412,7 +426,7 @@ $('qSeg').addEventListener('click', (e) => { const b = e.target.closest('button'
 [...$('qSeg').querySelectorAll('button')].forEach((x) => x.classList.toggle('on', x.dataset.q === pref));
 
 /* ---------------- boot ---------------- */
-P.slots = [slotOf('pistol'), null]; showGun(); applyTier(tier); syncMute(); renderScores($('scoreList'), loadScores());
+P.slots = [slotOf('pistol'), null]; showGun(); applyTier(tier); syncMute(); renderScores($('scoreList'), loadScores()); refreshGlobal();
 zombies.max = tier > 0 ? 26 : 16;
 for (let i = 0; i < 40; i++) tick(0.05);
 requestAnimationFrame(() => { post.render(0.016, 0, 0, 0); $('loading').classList.add('done'); setTimeout(() => $('loading').remove(), 800); });

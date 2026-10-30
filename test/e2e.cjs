@@ -7,6 +7,11 @@ const args = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swif
 async function run(b, name, mobile, quality) {
   console.log(`\n== ${name} ==`);
   const ctx = await b.newContext(mobile ? { viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : { viewport: { width: 1280, height: 720 } });
+  const posted = []; await ctx.route('https://race.vwfestmemecoin.com/**', async (r) => { const u = r.request().url(), m = r.request().method(), h = { 'access-control-allow-origin': '*', 'content-type': 'application/json' };
+    if (m === 'OPTIONS') return r.fulfill({ status: 204, headers: { ...h, 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'GET,POST' } });
+    if (u.endsWith('/start')) return r.fulfill({ status: 200, headers: h, body: JSON.stringify({ ok: true, token: 'tok.1.sig' }) });
+    if (u.endsWith('/submit')) { posted.push(JSON.parse(r.request().postData())); return r.fulfill({ status: 200, headers: h, body: JSON.stringify({ ok: true, rank: 1, top: [{ nickname: posted[0].nickname, score: posted[0].score, aux: posted[0].pts }, { nickname: '<img src=x onerror=window.__xss=1>', score: 2, aux: 100 }] }) }); }
+    return r.fulfill({ status: 200, headers: h, body: JSON.stringify({ ok: true, top: [{ nickname: 'DeadEye', score: 9, aux: 12000 }, { nickname: '<b>Evil</b>', score: 3, aux: 1000 }] }) }); });
   const p = await ctx.newPage(); const errs = [];
   p.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errs.push(m.type() + ': ' + m.text()); }); p.on('pageerror', (e) => errs.push('PAGEERROR: ' + e.message));
   const resp = await p.goto(BASE + `?quality=${quality}&noadapt=1`); ok(resp.status() === 200, 'page returns 200');
@@ -112,7 +117,15 @@ async function run(b, name, mobile, quality) {
   await p.evaluate(() => { const g = __game; g.zombies.reset(); g.G.round = 3; g.P.hp = g.PLAYER_MAX_HP; for (let k = 0; k < 3; k++) { const z = g.zombies.spawn(g.world.windows[1], 3); z.state = 'chase'; z.speed = 0; z.cool = 0; z.pos.set(g.P.x + (k - 1) * 0.5, 0, g.P.z - 0.9); z.dmg = 60; } });
   await sim(p, 120); ok(await p.evaluate(() => __game.G.state === 'over'), 'zombies can kill the player → game over');
   ok(await p.evaluate(() => !document.getElementById('over').classList.contains('hidden') && document.getElementById('oRound').textContent === '3'), 'game-over screen shows round reached (3)');
-  await p.waitForTimeout(900); await p.screenshot({ path: `${OUT}/${name}-3-gameover.png` });
+  await p.waitForTimeout(900);
+  ok(await p.evaluate(() => !document.getElementById('fPost').classList.contains('hidden')), 'game over shows the nickname post form (run token obtained)');
+  ok(await p.evaluate(() => document.querySelectorAll('#oGlobal li').length === 2 && document.querySelectorAll('#oGlobal img, #oGlobal b b').length === 0 && window.__xss === undefined), 'global board rendered, HTML in nicknames is not interpreted (no XSS)');
+  await p.screenshot({ path: `${OUT}/${name}-3-gameover.png` });
+  await p.fill('#nick', 'BugLife209'); await p.evaluate(() => document.getElementById('fPost').requestSubmit());
+  await p.waitForFunction(() => /Posted/.test(document.getElementById('postMsg').textContent), null, { timeout: 5000 }).catch(() => {});
+  ok(posted.length === 1 && posted[0].nickname === 'BugLife209' && posted[0].score === 3 && Number.isInteger(posted[0].pts) && Number.isInteger(posted[0].kills) && posted[0].token === 'tok.1.sig', 'score posted: nickname + round/points/kills + run token only');
+  ok(await p.evaluate(() => /#1/.test(document.getElementById('postMsg').textContent) && document.getElementById('fPost').classList.contains('hidden') && __game.G.state === 'over'), 'rank shown; typing a nickname + Enter did not restart the game');
+  await p.screenshot({ path: `${OUT}/${name}-3b-posted.png` });
   ok(await p.evaluate(() => JSON.parse(localStorage.getItem('vwz_scores') || '[]').length >= 1), 'high score saved to localStorage');
   // ---- audio smoke + mute
   const au = await p.evaluate(() => { const s = __game.sfx; const out = []; try { s.init(); for (const f of ['empty', 'shell', 'pump', 'deny', 'cash', 'hurt', 'heart', 'door', 'boom', 'spawnPower', 'open', 'over']) s[f](); s.shot('pistol'); s.shot('shotgun'); s.reload('rifle'); s.groan(0.3, 0.5, 1, 1); s.zhit(0, true); s.zdie(0, 0.5); s.tick(true); s.plank(true); s.repair(); s.power('nuke'); s.round(3); s.jingle(2); s.setMuted(true); s.setMuted(false); } catch (e) { out.push(String(e)); } return { err: out, state: s.ctx && s.ctx.state }; });
