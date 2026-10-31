@@ -139,3 +139,5 @@ kbd{background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.2);borde
 #over .globalBox{max-width:420px;margin-left:auto;margin-right:auto}
 .hidden{display:none!important}
 @media(max-height:640px){#over .globalBox{display:none}}
+.pw.pw2x{color:#ffd36b;border-color:#ffd36b88}
+#prompt .cost.poor{color:#ff5a6e}

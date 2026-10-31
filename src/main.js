@@ -55,6 +55,8 @@ beam.geometry.translate(0, -7, 0); beam.geometry.rotateX(-Math.PI / 2); beam.pos
 const gunRoot = new THREE.Group(); gunRoot.matrixAutoUpdate = false; viewScene.add(gunRoot);
 const vHemi = new THREE.HemisphereLight(0xb9c8ff, 0x4a3a2c, 1.5), vSun = new THREE.DirectionalLight(0xfff0dd, 2.2), gunFlash = new THREE.PointLight(0xffb866, 0, 3, 2); vSun.position.set(1.5, 2, 1); gunRoot.add(vHemi, vSun, vSun.target, gunFlash); gunFlash.position.set(0.15, -0.05, -0.9); const gunCache = {};
 const flashSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: textures.glow, color: new THREE.Color(6, 4, 1.6), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false })); flashSprite.scale.setScalar(0.3); flashSprite.visible = false; flashSprite.userData.noAO = true;
+// CSP forbids style attributes, so dynamic widths go through the CSSOM (allowed): data-w = width %.
+function cspStyles(root) { root.querySelectorAll('[data-w]').forEach(e => { e.style.width = e.dataset.w + '%'; }); }
 function gunModel(id) { if (!gunCache[id]) { const g = buildViewmodel(id); g.visible = false; gunRoot.add(g); gunCache[id] = g; } return gunCache[id]; }
 
 /* ---------------- state ---------------- */
@@ -109,9 +111,9 @@ function updateHUD() {
   // damage overlays
   const dm = clamp(P.dmg, 0, 1); $('fx-damage').style.opacity = tier === 0 ? Math.min(1, dm + (P.hp < P.maxHp * LOW_HP_FRAC ? 0.25 : 0)) : 0;
   // power-up chips
-  const pw = $('powers'); let html = ''; if (G.double > 0) html += `<div class="pw glass${G.double < 5 ? ' blink' : ''}" style="color:#ffd36b;border-color:#ffd36b88">2× CASH <b>${Math.ceil(G.double)}</b></div>`; if (pw._h !== html) { pw._h = html; pw.innerHTML = html; }
+  const pw = $('powers'); let html = ''; if (G.double > 0) html += `<div class="pw pw2x glass${G.double < 5 ? ' blink' : ''}">2× CASH <b>${Math.ceil(G.double)}</b></div>`; if (pw._h !== html) { pw._h = html; pw.innerHTML = html; }
 }
-function setPrompt(html, ok = true) { const e = $('prompt'); if (html !== hud.prompt) { hud.prompt = html; e.innerHTML = html; e.classList.toggle('on', !!html); } }
+function setPrompt(html, ok = true) { const e = $('prompt'); if (html !== hud.prompt) { hud.prompt = html; e.innerHTML = html; cspStyles(e); e.classList.toggle('on', !!html); } }
 
 /* ---------------- weapons ---------------- */
 function showGun() { for (const k in gunCache) gunCache[k].visible = false; const g = gunModel(cur().id); g.visible = G.state === 'playing' || P.dead; g.add(flashSprite); flashSprite.position.copy(g.userData.muzzle.position).add(new THREE.Vector3(0, 0, -0.04)); P.gun = g; }
@@ -233,8 +235,8 @@ function interact(f, held, dt) {
 }
 function updatePrompt(f) {
   if (!f) return setPrompt('');
-  const key = isTouch ? '<kbd>E</kbd>' : '<kbd>E</kbd>'; const cost = (n) => `<span class="cost" style="${P.pts < n ? 'color:#ff5a6e' : ''}">${n}</span>`;
-  if (f.type === 'win') setPrompt(`${key}${isTouch ? 'Hold' : 'Hold'} to repair barricade<span class="prog"><i style="width:${Math.round((f.w.count / 6) * 100)}%"></i></span>`);
+  const key = isTouch ? '<kbd>E</kbd>' : '<kbd>E</kbd>'; const cost = (n) => `<span class="cost${P.pts < n ? ' poor' : ''}">${n}</span>`;
+  if (f.type === 'win') setPrompt(`${key}${isTouch ? 'Hold' : 'Hold'} to repair barricade<span class="prog"><i data-w="${Math.round((f.w.count / 6) * 100)}"></i></span>`);
   else if (f.type === 'buy') { const owned = P.slots.find((s) => s && s.id === f.b.id); setPrompt(owned ? `${key}Refill ${f.b.name}${cost(Math.floor(f.b.price / 2))}` : `${key}Buy ${f.b.name}${cost(f.b.price)}`); }
   else if (f.type === 'door') setPrompt(`${key}Open the gate${cost(world.door.price)}`);
   else if (f.type === 'crate') setPrompt(world.crate.state === 'ready' ? `${key}Take ${WEAPONS[world.crate.weapon].name}` : `${key}Lucky Toolbox${cost(world.crate.price)}`);
