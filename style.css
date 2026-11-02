@@ -144,3 +144,5 @@ kbd{background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.2);borde
 /* title always fits its panel (phone + desktop): size from the panel's own width */
 #menu .panel{container-type:inline-size}
 #menu h1{white-space:nowrap;letter-spacing:.04em;font-size:clamp(34px,13.5cqi,88px)}
+#minimap{position:absolute;left:18px;top:104px;width:104px;height:104px;border-radius:50%;background:rgba(8,14,20,.55);border:1.5px solid rgba(120,220,200,.45);box-shadow:0 2px 12px rgba(0,0,0,.4);pointer-events:none}
+body.touch #minimap{left:16px;top:96px;width:92px;height:92px}

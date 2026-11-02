@@ -3,25 +3,33 @@ import * as THREE from 'three';
 import { unpack, posAttr, nrmAttr, PACKS } from './pack.js';
 const T = {}; let meta;
 function init() { const u = unpack(PACKS.zombies), view = u.view; meta = u.meta;
-for (const m of meta) { const g = new THREE.BufferGeometry(); g.setAttribute('position', posAttr(view, m)); g.setAttribute('normal', nrmAttr(view, m)); g.setAttribute('skinIndex', new THREE.BufferAttribute(view(Uint8Array, m.si), 4)); g.setAttribute('skinWeight', new THREE.BufferAttribute(view(Uint8Array, m.sw), 4, true)); g.setIndex(new THREE.BufferAttribute(view(Uint16Array, m.idx), 1));
+for (const m of meta) { const g = new THREE.BufferGeometry(); g.setAttribute('position', posAttr(view, m)); g.setAttribute('normal', nrmAttr(view, m)); g.setAttribute('skinIndex', new THREE.BufferAttribute(view(Uint8Array, m.si), 4)); g.setAttribute('skinWeight', new THREE.BufferAttribute(view(Uint8Array, m.sw), 4, true)); const ix = view(Uint16Array, m.idx); trimHair(ix, g.attributes.position.array, m); g.setIndex(new THREE.BufferAttribute(ix, 1));
   m.groups.forEach((gr) => g.addGroup(gr.start, gr.count, gr.slot >= 0 ? gr.slot : 3)); g.computeBoundingSphere(); T[m.tag] = { g, m }; } }
+// The baked hair is a closed ellipsoid shell (z -0.11..+0.12) that encloses the whole head incl. eyes/brow (z~0.11),
+// so from the front it renders as a dark faceted ball. Cut its front-lower faces (degenerate them) to leave a cap.
+function trimHair(ix, p, m) { const gs = m.groups.filter((gr) => gr.slot < 0); for (const gr of gs) { let top = -9; for (let i = gr.start; i < gr.start + gr.count; i++) top = Math.max(top, p[ix[i] * 3 + 1]); if (top < 1.75 || gr.count < 200) continue; gr.hair = true;
+    // oversized afro shell (variant 3: 0.38 m wide vs a 0.18 m head, 29-vert far LOD) -> fit it to the skull
+    const vs = new Set(); for (let i = gr.start; i < gr.start + gr.count; i++) vs.add(ix[i]); let w = 0; for (const v of vs) w = Math.max(w, Math.abs(p[v * 3]));
+    if (w > 0.12) { const k = 0.12 / w; for (const v of vs) { p[v * 3] *= k; p[v * 3 + 2] = (p[v * 3 + 2] + 0.01) * k - 0.01; p[v * 3 + 1] = 1.66 + (p[v * 3 + 1] - 1.66) * (p[v * 3 + 1] > 1.66 ? 0.72 : k); } }
+    for (let i = gr.start; i < gr.start + gr.count; i += 3) { let y = 0, z = 0; for (let j = 0; j < 3; j++) { y += p[ix[i + j] * 3 + 1] / 3; z += p[ix[i + j] * 3 + 2] / 3; }
+      if ((z > 0.035 && y < 1.715) || (z > 0.075 && y < 1.74) || y < 1.6) ix[i + 1] = ix[i + 2] = ix[i]; } } }
 export const VARIANTS = 4, LODS = ['near', 'mid', 'far'];
-const shared = new Map(); const colMat = (hex) => { let m = shared.get(hex); if (!m) { const c = new THREE.Color('#' + hex).multiplyScalar(0.6); m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 }); shared.set(hex, m); } return m; };
+const shared = new Map(); const colMat = (hex, hair) => { let m = shared.get(hex); if (!m) { const c = new THREE.Color('#' + hex).multiplyScalar(hair ? 0.85 : 0.6); if (hair) c.offsetHSL(0, 0, 0.04); m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }); shared.set(hex, m); } return m; };
 // procedural rot + tears in object space (no UVs, no alpha holes: tears show rotten skin underneath)
 const NOISE = `float zh(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);} float zn(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mix(zh(i),zh(i+vec3(1,0,0)),f.x),mix(zh(i+vec3(0,1,0)),zh(i+vec3(1,1,0)),f.x),f.y),mix(mix(zh(i+vec3(0,0,1)),zh(i+vec3(1,0,1)),f.x),mix(zh(i+vec3(0,1,1)),zh(i+vec3(1,1,1)),f.x),f.y),f.z);}`;
-function zmat(kind, seed) { const m = new THREE.MeshStandardMaterial({ roughness: kind === 0 ? 0.7 : 0.95 }); m.userData.seed = { value: seed };
+function zmat(kind, seed) { const m = new THREE.MeshStandardMaterial({ roughness: kind === 0 ? 0.7 : 0.95, polygonOffset: kind !== 0, polygonOffsetFactor: -1.5, polygonOffsetUnits: -4 }); m.userData.seed = { value: seed };
   m.onBeforeCompile = (s) => { s.uniforms.zSeed = m.userData.seed; s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vZ;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvZ = position;');
     s.fragmentShader = s.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vZ; uniform float zSeed;\n' + NOISE).replace('#include <color_fragment>', `#include <color_fragment>
       vec3 q = vZ*vec3(18.)+zSeed; float n = zn(q)*0.6+zn(q*2.3)*0.4;
       ${kind === 0 ? 'diffuseColor.rgb *= mix(vec3(0.55,0.62,0.5), vec3(1.0), smoothstep(0.25,0.75,n)); float b = smoothstep(0.78,0.86,zn(q*0.7+3.)); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.25,0.03,0.04), b*0.8);'
-        : 'float t = smoothstep(0.71,0.74,n); float e = smoothstep(0.66,0.71,n)-t; diffuseColor.rgb *= 0.75+0.35*zn(q*4.); diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb*0.35, e); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.075,0.095,0.06)*mix(1.,0.6,zn(q*3.)), t); float bl = smoothstep(0.8,0.9,zn(q*0.5+7.)); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.22,0.03,0.03), bl*0.7);'}`); };
+        : 'float m2 = zn(vZ*7.+zSeed)*0.65+zn(vZ*15.+zSeed)*0.35; float t = smoothstep(0.70,0.78,m2)*0.8; float e = smoothstep(0.62,0.70,m2)*0.5-t*0.5; diffuseColor.rgb *= 0.85+0.2*zn(q*2.); diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb*0.35, e); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.075,0.095,0.06)*mix(1.,0.6,zn(q*3.)), t); float bl = smoothstep(0.8,0.9,zn(q*0.5+7.)); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.22,0.03,0.03), bl*0.7);'}`); };
   m.customProgramCacheKey = () => 'zmat' + kind; return m; }
 const AVS = 1.1;
 export function upgradeZombies(zombies) { init();
   zombies.list.forEach((z, i) => { const v = i % VARIANTS; const bones = T[v + ':near'].m.bones; const B = bones.map((b) => { const o = new THREE.Bone(); o.name = b.n; o.position.fromArray(b.t); return o; });
     bones.forEach((b, k) => { if (b.p >= 0) B[b.p].add(B[k]); }); const root = new THREE.Group(); root.add(B[0]); root.scale.setScalar(T[v + ':near'].m.scale * AVS); root.updateMatrixWorld(true); const sk = new THREE.Skeleton(B);
     z.sk = zmat(0, i * 7.3); z.sh = zmat(1, i * 3.1); z.pa = zmat(1, i * 5.7 + 2);
-    z.lods = LODS.map((l) => { const t = T[v + ':' + l]; const mats = [z.sk, z.sh, z.pa, ...[]]; const gm = t.m.groups.map((gr) => (gr.slot >= 0 ? [z.sk, z.sh, z.pa][gr.slot] : colMat(gr.col)));
+    z.lods = LODS.map((l) => { const t = T[v + ':' + l]; const mats = [z.sk, z.sh, z.pa, ...[]]; const gm = t.m.groups.map((gr) => (gr.slot >= 0 ? [z.sk, z.sh, z.pa][gr.slot] : colMat(gr.col, gr.hair)));
       const g = t.g.clone(); g.clearGroups(); t.m.groups.forEach((gr, k) => g.addGroup(gr.start, gr.count, k)); const mesh = new THREE.SkinnedMesh(g, gm); mesh.frustumCulled = false; mesh.castShadow = true; mesh.bind(sk); mesh.visible = false; root.add(mesh); return mesh; });
     z.bones = Object.fromEntries(B.map((b) => [b.name, b])); z.hipY = z.bones.hips.position.y; z.root.add(root); z.pelvis.traverse((o) => { if (o.isMesh) o.visible = false; }); z.variant = v; });
   const ou = zombies.update.bind(zombies); const vis = [];

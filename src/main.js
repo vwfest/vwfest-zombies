@@ -7,6 +7,7 @@ import { getMode, scaled } from './modes.js';
 import { Zombies } from './zombie.js';
 import { upgradeZombies } from './hd/zombies.js';
 import { loadPacks } from './hd/pack.js';
+import { makeMinimap } from './minimap.js';
 await loadPacks(); // pre-baked models, fetched separately (assets/*.bin)
 import { FX, Motes, Post } from './fx.js';
 import { Sound } from './audio.js';
@@ -49,6 +50,7 @@ const motes = new Motes(textures, 260, { R: 20, y0: 0.3, y1: 6, size: 0.07, alph
 const mist = new Motes(textures, 46, { R: 55, y0: 0.4, y1: 2.2, size: 5.5, alpha: 0.045, col: [0.55, 0.5, 0.62], additive: false, speed: 0.7 }); scene.add(mist.points);
 const zombies = new Zombies(scene, world, tier);
 window.__hd = upgradeZombies(zombies);
+let mm; const minimap = (dt) => (mm || (mm = makeMinimap(world, zombies, P)))(dt);
 const viewScene = new THREE.Scene(); const post = new Post(renderer, scene, cam, viewScene);
 
 // environment map from the procedural night sky (PBR reflections)
@@ -369,7 +371,7 @@ function tick(dt) {
   if (G.phase === 'wait') { G.interT -= dt; if (G.interT <= 0) startRound(1); }
   else if (G.phase === 'round') { trySpawn(dt); if (G.toSpawn <= 0 && zombies.alive <= 0) { G.phase = 'inter'; G.interT = MODE.inter; } }
   else if (G.phase === 'inter') { G.interT -= dt; if (G.interT <= 0) startRound(G.round + 1); }
-  zombies.update(dt, t, P, world.door, cbs); world.update(dt, t, P);
+  zombies.update(dt, t, P, world.door, cbs); world.update(dt, t, P); minimap(dt);
   motes.center = { x: P.x, z: P.z }; mist.center = motes.center; motes.ps.update(dt); mist.ps.update(dt); fx.update(dt); updateCrate(dt);
   // power-ups
   if (G.double > 0) G.double -= dt;

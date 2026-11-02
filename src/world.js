@@ -190,8 +190,12 @@ export class World {
     const { M } = this; const S = this.staticGroup;
     // dunes + rocks + cacti + distant mesas (non-colliding, outside the fences)
     const inside = (x, z) => x > -30 && x < 30 && z > -58 && z < 30;
-    const dm = M.flat(0x6a5238, 1, 0);
-    for (let i = 0; i < 26; i++) { const a = rnd(TAU), r = rnd(60, 190), x = Math.cos(a) * r, z = -14 + Math.sin(a) * r; const s = rnd(14, 38); const d = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 6), dm); d.scale.set(s * rnd(1.2, 2), s * rnd(0.12, 0.28), s * rnd(1, 1.6)); d.position.set(x, 0, z); d.rotation.y = rnd(3); d.receiveShadow = true; S.add(d); }
+    // dunes: textured sand (own repeat), lumpy smooth-shaded mound instead of a flat-shaded 12x6 ellipsoid
+    const dm = M.sand.clone(); dm.map = M.sand.map.clone(); dm.map.repeat.set(6, 3); dm.bumpMap = M.sand.bumpMap.clone(); dm.bumpMap.repeat.set(6, 3); dm.color = new THREE.Color(0xb7a184); dm.bumpScale = 1.5;
+    let dg; const duneGeo = () => dg || (dg = (() => { const g = new THREE.SphereGeometry(1, 40, 14, 0, TAU, 0, Math.PI / 2), p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(z, x); const h = y * (0.75 + 0.25 * Math.sin(a * 3 + 1) + 0.12 * Math.sin(a * 7)); p.setXYZ(i, x * (1 + 0.08 * Math.sin(a * 5)), Math.pow(Math.max(h, 0), 1.6), z); }
+      g.computeVertexNormals(); return g; })());
+    for (let i = 0; i < 26; i++) { const a = rnd(TAU), r = rnd(60, 190), x = Math.cos(a) * r, z = -14 + Math.sin(a) * r; const s = Math.min(rnd(14, 38), (r - 48) / 2.1); if (s < 6) continue; /* keep the whole mound outside the yard (old: up to 76 m wide at r=60, a flat slab poking into the lot) */ const d = new THREE.Mesh(duneGeo(), dm); d.scale.set(s * rnd(1.2, 2), s * rnd(0.12, 0.28), s * rnd(1, 1.6)); d.position.set(x, 0, z); d.rotation.y = rnd(3); d.receiveShadow = true; S.add(d); }
     const mm = M.flat(0x2a2634, 1, 0);
     for (let i = 0; i < 12; i++) { const a = (i / 12) * TAU + rnd(-0.2, 0.2), r = rnd(230, 330); const w = rnd(30, 70), h = rnd(25, 60); const m = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.55, w * 0.8, h, 6), mm); m.position.set(Math.cos(a) * r, h / 2 - 2, -14 + Math.sin(a) * r); m.rotation.y = rnd(3); S.add(m); }
     for (let i = 0; i < 38; i++) { let x, z, tries = 0; do { const a = rnd(TAU), r = rnd(34, 90); x = Math.cos(a) * r; z = -14 + Math.sin(a) * r * 0.9; } while (inside(x, z) && ++tries < 20); const c = makeCactus(M); c.position.set(x, 0, z); c.rotation.y = rnd(3); c.traverse((m) => { if (m.isMesh) m.castShadow = true; }); S.add(c); }
