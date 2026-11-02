@@ -1,3 +1,4 @@
+import { hdCar } from './hd/integrate.js';
 import * as THREE from 'three';
 import { rnd, pick } from './util.js';
 
@@ -31,7 +32,7 @@ const cy = (r, l, x, y, z, m, rz = true, seg = 12) => { const c = new THREE.Mesh
 function wheel(M, x, y, z, r = 0.34) { const g = new THREE.Group(); g.add(cy(r, 0.22, 0, 0, 0, M.tire, true, 14)); g.add(cy(r * 0.55, 0.24, 0, 0, 0, M.chrome, true, 8)); g.position.set(x, y, z); return g; }
 
 // Air-cooled Beetle shell: forward = -Z. Footprint ~1.8 x 4.0
-export function makeBeetle(M, color, opt = {}) {
+export function makeBeetleLo(M, color, opt = {}) {
   const g = new THREE.Group(), p = M.paint(color);
   g.add(sph(1, 0.9, 0.5, 1.95, 0, 0.78, 0, p, 18, 10));
   g.add(sph(1, 0.72, 0.42, 0.95, 0, 1.17, 0.12, M.glass, 16, 8));
@@ -49,7 +50,7 @@ export function makeBeetle(M, color, opt = {}) {
   return g;
 }
 // VW-style microbus: forward = -Z. Footprint ~2.1 x 4.6
-export function makeBus(M, c1, c2 = 0xe6dcc0, opt = {}) {
+export function makeBusLo(M, c1, c2 = 0xe6dcc0, opt = {}) {
   const g = new THREE.Group(), a = M.paint(c1), b = M.paint(c2);
   g.add(bx(2.0, 0.85, 4.5, 0, 0.78, 0, a)); g.add(bx(1.96, 0.9, 4.4, 0, 1.66, 0, b));
   g.add(bx(2.04, 0.1, 4.55, 0, 1.19, 0, a)); g.add(bx(2.0, 0.08, 4.5, 0, 2.15, 0, a));
@@ -69,3 +70,6 @@ export function makeCrate(M, s = 1) { const g = new THREE.Group(); g.add(bx(s, s
 export function makePole(M, tealBulb) { const g = new THREE.Group(); g.add(cy(0.09, 5.2, 0, 2.6, 0, M.fenceDark, false, 8)); g.add(bx(0.12, 0.12, 1.1, 0, 5.15, -0.5, M.fenceDark)); g.add(bx(0.5, 0.12, 0.3, 0, 5.08, -1.1, M.fenceDark)); const b = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6), tealBulb ? M.lampBulbT : M.lampBulb); b.position.set(0, 4.98, -1.1); b.userData.bulb = true; g.add(b); g.userData.size = [0.4, 5.2, 0.4]; g.userData.bulbPos = new THREE.Vector3(0, 4.9, -1.1); return g; }
 export function makeCactus(M) { const g = new THREE.Group(), m = M.flat(0x2f5a38, 0.9, 0); const h = rnd(1.6, 3.2); g.add(cy(0.22, h, 0, h / 2, 0, m, false, 8)); g.add(sph(0.22, 1, 1, 1, 0, h, 0, m, 8, 5)); if (Math.random() < 0.8) { const a = cy(0.13, 0.7, 0.4, h * 0.6, 0, m, false, 6); g.add(a); g.add(cy(0.13, 0.5, 0.4 + 0.32, h * 0.6 + 0.3, 0, m, false, 6)); g.children[g.children.length - 1].rotation.z = 0; } return g; }
 export function makeRock(M, s) { const r = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), M.flat(0x6b5a48, 0.95, 0)); r.scale.set(rnd(0.9, 1.5), rnd(0.5, 0.9), rnd(0.9, 1.4)); r.rotation.set(rnd(3), rnd(3), rnd(3)); r.position.y = s * 0.3; const g = new THREE.Group(); g.add(r); return g; }
+
+export const makeBeetle = (M, c, opt = {}) => hdCar('small', c, null, opt);
+export const makeBus = (M, c1, c2, opt = {}) => hdCar('big', c1, c2, opt);

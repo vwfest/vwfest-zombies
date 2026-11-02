@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { Mats, makeBeetle, makeBus, makeTireStack, makeDrum, makeCrate, makePole, makeCactus, makeRock, randPaint } from './props.js';
+import { Mats, makeBeetle, makeBus, makeBeetleLo, makeBusLo, makeTireStack, makeDrum, makeCrate, makePole, makeCactus, makeRock, randPaint } from './props.js';
 import { buildViewmodel, WEAPONS } from './weapons.js';
 import { rnd, pick, clamp, TAU } from './util.js';
 
@@ -197,7 +197,7 @@ export class World {
     for (let i = 0; i < 38; i++) { let x, z, tries = 0; do { const a = rnd(TAU), r = rnd(34, 90); x = Math.cos(a) * r; z = -14 + Math.sin(a) * r * 0.9; } while (inside(x, z) && ++tries < 20); const c = makeCactus(M); c.position.set(x, 0, z); c.rotation.y = rnd(3); c.traverse((m) => { if (m.isMesh) m.castShadow = true; }); S.add(c); }
     for (let i = 0; i < 40; i++) { let x, z, tries = 0; do { const a = rnd(TAU), r = rnd(30, 110); x = Math.cos(a) * r; z = -14 + Math.sin(a) * r * 0.9; } while (inside(x, z) && ++tries < 20); const r = makeRock(M, rnd(0.4, 1.8)); r.position.set(x, 0, z); r.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } }); S.add(r); }
     // wrecks outside, visible past the fence
-    for (let i = 0; i < 9; i++) { const a = rnd(TAU), r = rnd(34, 70); const x = Math.cos(a) * r, z = -14 + Math.sin(a) * r * 0.9; if (inside(x, z)) continue; const w = Math.random() < 0.35 ? makeBus(M, randPaint(), 0xe6dcc0, { tilt: rnd(-0.08, 0.08) }) : makeBeetle(M, randPaint(), { tilt: rnd(-0.1, 0.1), missing: Math.random() < 0.5 }); w.position.set(x, 0, z); w.rotation.y = rnd(3); w.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } }); S.add(w); }
+    for (let i = 0; i < 9; i++) { const a = rnd(TAU), r = rnd(34, 70); const x = Math.cos(a) * r, z = -14 + Math.sin(a) * r * 0.9; if (inside(x, z)) continue; const w = Math.random() < 0.35 ? makeBusLo(M, randPaint(), 0xe6dcc0, { tilt: rnd(-0.08, 0.08) }) : makeBeetleLo(M, randPaint(), { tilt: rnd(-0.1, 0.1), missing: Math.random() < 0.5 }); w.position.set(x, 0, z); w.rotation.y = rnd(3); w.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } }); S.add(w); }
   }
   buildLights() {
     const sc = this.scene;
@@ -223,9 +223,9 @@ export class World {
   // merge static geometry per material to cut draw calls
   batch() {
     const S = this.staticGroup; S.updateMatrixWorld(true); const buckets = new Map(); const keep = [];
-    S.traverse((o) => { if (!o.isMesh) return; if (o.userData.bulb) { keep.push(o); return; } const key = o.material.uuid + (o.castShadow ? 'c' : 'n') + (o.receiveShadow ? 'r' : 'n'); let b = buckets.get(key); if (!b) { b = { mat: o.material, cast: o.castShadow, rec: o.receiveShadow, geos: [] }; buckets.set(key, b); } const g = o.geometry.clone(); g.applyMatrix4(o.matrixWorld); for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k); b.geos.push(g); });
+    S.traverse((o) => { if (!o.isMesh) return; if (o.userData.bulb || o.userData.noBatch) { keep.push(o); return; } const key = o.material.uuid + (o.castShadow ? 'c' : 'n') + (o.receiveShadow ? 'r' : 'n'); let b = buckets.get(key); if (!b) { b = { mat: o.material, cast: o.castShadow, rec: o.receiveShadow, geos: [] }; buckets.set(key, b); } const g = o.geometry.clone(); g.applyMatrix4(o.matrixWorld); for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k); b.geos.push(g); });
     for (const b of buckets.values()) { const mg = mergeGeometries(b.geos, false); if (!mg) { console.warn('merge failed'); continue; } const m = new THREE.Mesh(mg, b.mat); m.castShadow = b.cast; m.receiveShadow = b.rec; m.frustumCulled = false; this.root.add(m); b.geos.forEach((g) => g.dispose()); }
-    for (const o of keep) { const p = new THREE.Mesh(o.geometry, o.material); p.applyMatrix4(o.matrixWorld); p.matrixAutoUpdate = true; p.position.setFromMatrixPosition(o.matrixWorld); p.rotation.set(0, 0, 0); p.scale.setScalar(1); this.root.add(p); }
+    for (const o of keep) { if (o.userData.noBatch) { const q = o.clone(); q.matrixAutoUpdate = false; q.matrix.copy(o.matrixWorld); q.matrixWorldNeedsUpdate = true; this.root.add(q); continue; } const p = new THREE.Mesh(o.geometry, o.material); p.applyMatrix4(o.matrixWorld); p.matrixAutoUpdate = true; p.position.setFromMatrixPosition(o.matrixWorld); p.rotation.set(0, 0, 0); p.scale.setScalar(1); this.root.add(p); }
     this.staticGroup = null;
   }
   // ---- collision + raycast ----

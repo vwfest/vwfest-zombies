@@ -3,6 +3,7 @@ import { lb } from './lb.js';
 import { makeTextures, rnd, pick, clamp, lerp, TAU } from './util.js';
 import { World, areaOf, DOOR_Z } from './world.js';
 import { Zombies } from './zombie.js';
+import { upgradeZombies } from './hd/integrate.js';
 import { FX, Motes, Post } from './fx.js';
 import { Sound } from './audio.js';
 import { WEAPONS, CRATE_POOL, buildViewmodel } from './weapons.js';
@@ -41,6 +42,7 @@ const fx = new FX(scene, textures, tier);
 const motes = new Motes(textures, 260, { R: 20, y0: 0.3, y1: 6, size: 0.07, alpha: 0.22 }); scene.add(motes.points);
 const mist = new Motes(textures, 46, { R: 55, y0: 0.4, y1: 2.2, size: 5.5, alpha: 0.045, col: [0.55, 0.5, 0.62], additive: false, speed: 0.7 }); scene.add(mist.points);
 const zombies = new Zombies(scene, world, tier);
+window.__hd = upgradeZombies(zombies).then((s) => { applyTier(tier); return s; });
 const viewScene = new THREE.Scene(); const post = new Post(renderer, scene, cam, viewScene);
 
 // environment map from the procedural night sky (PBR reflections)
