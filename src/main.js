@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { lb } from './lb.js';
 import { makeTextures, rnd, pick, clamp, lerp, TAU } from './util.js';
 import { World, areaOf, DOOR_Z } from './world.js';
+import { buildWorld, getMap, MAPS } from './maps/index.js';
+import { getMode, scaled } from './modes.js';
 import { Zombies } from './zombie.js';
 import { upgradeZombies } from './hd/zombies.js';
 import { loadPacks } from './hd/pack.js';
@@ -39,7 +41,9 @@ const cam = new THREE.PerspectiveCamera(FOV, 1, 0.05, 700); cam.rotation.order =
 let pref = qs.get('quality') || (() => { try { return localStorage.getItem('vwz_q') || 'auto'; } catch (e) { return 'auto'; } })();
 let tier = pref === 'high' ? 2 : pref === 'medium' ? 1 : pref === 'low' ? 0 : isTouch ? 0 : 2;
 const textures = makeTextures(isTouch ? 256 : 512);
-const world = new World(scene, textures, tier);
+const MAP = getMap(qs.get('map') || (() => { try { return localStorage.getItem('vwz_map'); } catch (e) { return null; } })());
+let MODE = scaled(getMode(qs.get('mode') || (() => { try { return localStorage.getItem('vwz_mode'); } catch (e) { return null; } })()), 1);
+const world = buildWorld(scene, textures, tier, MAP.id);
 const fx = new FX(scene, textures, tier);
 const motes = new Motes(textures, 260, { R: 20, y0: 0.3, y1: 6, size: 0.07, alpha: 0.22 }); scene.add(motes.points);
 const mist = new Motes(textures, 46, { R: 55, y0: 0.4, y1: 2.2, size: 5.5, alpha: 0.045, col: [0.55, 0.5, 0.62], additive: false, speed: 0.7 }); scene.add(mist.points);
@@ -78,7 +82,7 @@ function applyTier(t) {
   renderer.setPixelRatio(pr); post.pr = pr;
   renderer.shadowMap.enabled = t > 0; renderer.shadowMap.needsUpdate = true;
   post.build(['direct', 'bloom', 'full'][t]); resize();
-  world.setTier(t); zombies.setTier(t); fx.tier = t; motes.points.visible = t > 0; mist.points.visible = t > 0; beam.visible = t > 0 && P.flashlight;
+  world.setTier(t); zombies.setTier(t); zombies.max = MAP.cap[t > 0 ? 1 : 0]; fx.tier = t; motes.points.visible = t > 0; mist.points.visible = t > 0; beam.visible = t > 0 && P.flashlight;
   spot.castShadow = t === 2; for (const z of zombies.list) z.root.traverse((o) => { if (o.isMesh) o.castShadow = t > 0; });
   scene.traverse((o) => { if (o.material && !Array.isArray(o.material)) o.material.needsUpdate = true; });
   document.body.classList.toggle('lowq', t === 0);
@@ -165,7 +169,7 @@ function shoot() {
   if (s.mag === 0 && !P.reloadT) setTimeout(() => G.state === 'playing' && startReload(), 220);
 }
 const pan = (p) => { const dx = p.x - P.x, dz = p.z - P.z, d = Math.hypot(dx, dz) || 1; return (dx * Math.cos(P.yaw) - dz * Math.sin(P.yaw)) / d; };
-function maybeDrop(z) { if (G.round < 2 || G.drops >= 2 || G.time - G.lastDrop < 18) return; if (Math.random() < 0.05) spawnPower(pick(['ammo', 'double', 'nuke']), z.pos.x, z.pos.z); }
+function maybeDrop(z) { if (G.round < 2 || G.drops >= MODE.maxDrops || G.time - G.lastDrop < 18) return; if (Math.random() < 0.05 * MODE.drop) spawnPower(pick(['ammo', 'double', 'nuke']), z.pos.x, z.pos.z); }
 
 /* ---------------- power-ups ---------------- */
 const PW = { ammo: { name: 'FULL MAGS', col: [0.3, 0.7, 2.4], sub: 'All ammo refilled', hex: '#6bb8ff' }, double: { name: '2× CASH', col: [3, 2.2, 0.4], sub: 'Double points for 30s', hex: '#ffd36b' }, nuke: { name: 'KABOOM', col: [3, 0.4, 0.4], sub: 'Every zombie goes down', hex: '#ff6b6b' }, health: { name: 'MED KIT', col: [0.25, 2.6, 0.9], sub: '+50% health', hex: '#4dffb0' } };
@@ -208,9 +212,9 @@ function updateCrate(dt) {
 }
 
 /* ---------------- rounds ---------------- */
-function roundCount(r) { return Math.round(6 + r * 2.3 + r * r * 0.12); }
+function roundCount(r) { return Math.max(3, Math.round((6 + r * 2.3 + r * r * 0.12) * MODE.count)); }
 function startRound(n) {
-  G.round = n; G.toSpawn = roundCount(n); G.brutes = n >= 5 ? (n % 5 === 0 ? Math.min(4, 1 + ((n / 5) | 0)) : n >= 7 ? 1 : 0) : 0; G.phase = 'round'; G.spawnT = 1.5; G.drops = 0;
+  G.round = n; G.toSpawn = roundCount(n); G.brutes = n >= 5 ? (n % 5 === 0 ? Math.min(4, 1 + ((n / 5) | 0)) : n >= 7 ? 1 : 0) : 0; G.brutes = Math.round(G.brutes * MODE.brute); G.phase = 'round'; G.spawnT = 1.5; G.drops = 0;
   sfx.round(n); banner('ROUND ' + n, n === 1 ? 'Board up. Hold the yard.' : 'They are faster this time'); const e = $('roundNum'); e.classList.remove('pulse'); void e.offsetWidth; e.classList.add('pulse');
 }
 function activeWindows() { return world.windows.filter((w) => w.area === 'A' || world.door.open); }
@@ -218,7 +222,7 @@ function trySpawn(dt) {
   if (G.phase !== 'round' || G.toSpawn <= 0) return; G.spawnT -= dt; if (G.spawnT > 0) return;
   if (zombies.alive >= zombies.max) { G.spawnT = 0.3; return; }
   const act = activeWindows(); act.sort((a, b) => (a.c.x - P.x) ** 2 + (a.c.z - P.z) ** 2 - ((b.c.x - P.x) ** 2 + (b.c.z - P.z) ** 2)); const w = Math.random() < 0.6 ? act[Math.min(act.length - 1, (Math.random() * 2) | 0)] : pick(act);
-  const brute = G.brutes > 0 && G.toSpawn <= G.brutes; if (zombies.spawn(w, G.round, brute)) { G.toSpawn--; } G.spawnT = Math.max(0.35, 2.0 - G.round * 0.13) * rnd(0.7, 1.2);
+  const brute = G.brutes > 0 && G.toSpawn <= G.brutes; const zz = zombies.spawn(w, G.round, brute); if (zz) { G.toSpawn--; zz.hp = zz.maxHp = zz.maxHp * MODE.hp; zz.speed = Math.min(6.5, zz.speed * MODE.speed); zz.dmg = Math.round(zz.dmg * MODE.dmg); } G.spawnT = Math.max(0.3, 2.0 - G.round * 0.13) * rnd(0.7, 1.2) * MODE.spawnGap;
 }
 
 /* ---------------- interaction ---------------- */
@@ -315,7 +319,7 @@ function renderScores(el, list) { el.innerHTML = list.length ? list.map((s, i) =
 
 /* ---------------- game flow ---------------- */
 function newGame() {
-  Object.assign(P, { x: 0, z: 12, yaw: 0, pitch: 0, vx: 0, vz: 0, hp: PLAYER_MAX_HP, lastHit: -99, pts: 500, kills: 0, heads: 0, rP: 0, rY: 0, shake: 0, dmg: 0, cur: 0, fireCd: 0, reloadT: 0, switchT: 0, kick: 0, dead: false, deadT: 0, slots: [slotOf('pistol'), null] });
+  Object.assign(P, { x: MAP.spawn.x, z: MAP.spawn.z, yaw: 0, pitch: 0, vx: 0, vz: 0, hp: PLAYER_MAX_HP, lastHit: -99, pts: MODE.startPts, kills: 0, heads: 0, rP: 0, rY: 0, shake: 0, dmg: 0, cur: 0, fireCd: 0, reloadT: 0, switchT: 0, kick: 0, dead: false, deadT: 0, slots: [slotOf('pistol'), null] });
   Object.assign(G, { time: 0, runTime: 0, round: 0, toSpawn: 0, phase: 'wait', interT: 2.6, drops: 0, double: 0, kills: 0, repairT: 0, lastMed: -99 });
   zombies.reset(); fx.reset(); for (const u of G.ups) scene.remove(u.g); G.ups = []; closeCrate(); world.crate.lid.rotation.x = 0;
   for (const w of world.windows) while (w.count < 6) world.addPlank(w);
@@ -363,7 +367,7 @@ function tick(dt) {
   if (P.hp < P.maxHp * LOW_HP_FRAC && t - G.healBeat > 0.85) { G.healBeat = t; sfx.heart(); }
   // rounds
   if (G.phase === 'wait') { G.interT -= dt; if (G.interT <= 0) startRound(1); }
-  else if (G.phase === 'round') { trySpawn(dt); if (G.toSpawn <= 0 && zombies.alive <= 0) { G.phase = 'inter'; G.interT = 7; } }
+  else if (G.phase === 'round') { trySpawn(dt); if (G.toSpawn <= 0 && zombies.alive <= 0) { G.phase = 'inter'; G.interT = MODE.inter; } }
   else if (G.phase === 'inter') { G.interT -= dt; if (G.interT <= 0) startRound(G.round + 1); }
   zombies.update(dt, t, P, world.door, cbs); world.update(dt, t, P);
   motes.center = { x: P.x, z: P.z }; mist.center = motes.center; motes.ps.update(dt); mist.ps.update(dt); fx.update(dt); updateCrate(dt);
@@ -430,12 +434,16 @@ $('btnPlay').onclick = startGame; $('btnAgain').onclick = startGame; $('btnMenu'
 $('btnPlay').addEventListener('touchend', (e) => { e.preventDefault(); startGame(); });
 $('qSeg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; pref = b.dataset.q; try { localStorage.setItem('vwz_q', pref); } catch (er) {} [...$('qSeg').querySelectorAll('button')].forEach((x) => x.classList.toggle('on', x === b)); applyTier(pref === 'high' ? 2 : pref === 'medium' ? 1 : pref === 'low' ? 0 : isTouch ? 0 : 2); });
 [...$('qSeg').querySelectorAll('button')].forEach((x) => x.classList.toggle('on', x.dataset.q === pref));
+$('modeSeg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; MODE = scaled(getMode(b.dataset.m), 1); try { localStorage.setItem('vwz_mode', MODE.id); } catch (er) {} [...$('modeSeg').querySelectorAll('button')].forEach((x) => x.classList.toggle('on', x === b)); });
+[...$('modeSeg').querySelectorAll('button')].forEach((x) => x.classList.toggle('on', x.dataset.m === MODE.id));
+$('mapSeg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b || b.dataset.map === MAP.id) return; try { localStorage.setItem('vwz_map', b.dataset.map); } catch (er) {} const u = new URL(location.href); u.searchParams.set('map', b.dataset.map); location.href = u.toString(); });
+[...$('mapSeg').querySelectorAll('button')].forEach((x) => x.classList.toggle('on', x.dataset.map === MAP.id));
 
 /* ---------------- boot ---------------- */
 P.slots = [slotOf('pistol'), null]; showGun(); applyTier(tier); syncMute(); renderScores($('scoreList'), loadScores()); refreshGlobal();
-zombies.max = tier > 0 ? 26 : 16;
+zombies.max = MAP.cap[tier > 0 ? 1 : 0];
 for (let i = 0; i < 40; i++) tick(0.05);
 requestAnimationFrame(() => { post.render(0.016, 0, 0, 0); $('loading').classList.add('done'); setTimeout(() => $('loading').remove(), 800); });
 requestAnimationFrame(frame);
 // test / debug hooks (harmless in production)
-window.__game = { PLAYER_MAX_HP, MEDKIT_HP_FRAC, MEDKIT_COOLDOWN, MEDKIT_HEAL_FRAC, medKitReady, medKitOnKill, G, P, world, zombies, fx, input, tick, startGame, shoot, applyTier, switchTo, startReload, pause, resume, toMenu, giveWeapon, spawnPower, pickPower, interact, findFocus, die, get tier() { return tier; }, cam, renderer, scene, WEAPONS, sfx, renderOnce, aimAt(z, head = false) { const dx = z.pos.x - P.x, dz = z.pos.z - P.z, dy = (head ? 1.66 : 1.0) * z.scale - 1.7; P.yaw = Math.atan2(-dx, -dz); P.pitch = Math.atan2(dy, Math.hypot(dx, dz)); P.rP = P.rY = 0; }, isTouch };
+window.__game = { get MODE() { return MODE; }, MAP, MAPS, PLAYER_MAX_HP, MEDKIT_HP_FRAC, MEDKIT_COOLDOWN, MEDKIT_HEAL_FRAC, medKitReady, medKitOnKill, G, P, world, zombies, fx, input, tick, startGame, shoot, applyTier, switchTo, startReload, pause, resume, toMenu, giveWeapon, spawnPower, pickPower, interact, findFocus, die, get tier() { return tier; }, cam, renderer, scene, WEAPONS, sfx, renderOnce, aimAt(z, head = false) { const dx = z.pos.x - P.x, dz = z.pos.z - P.z, dy = (head ? 1.66 : 1.0) * z.scale - 1.7; P.yaw = Math.atan2(-dx, -dz); P.pitch = Math.atan2(dy, Math.hypot(dx, dz)); P.rP = P.rY = 0; }, isTouch };
