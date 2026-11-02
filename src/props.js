@@ -1,4 +1,4 @@
-import { hdCar } from './hd/integrate.js';
+import { hdCar } from './hd/cars.js';
 import * as THREE from 'three';
 import { rnd, pick } from './util.js';
 

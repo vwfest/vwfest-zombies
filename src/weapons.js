@@ -1,3 +1,4 @@
+import { buildViewmodelHD } from './guns.js';
 import * as THREE from 'three';
 
 export const WEAPONS = {
@@ -20,7 +21,8 @@ const glove = new THREE.MeshStandardMaterial({ color: 0x1b1d20, roughness: 0.8 }
 function box(g, w, h, d, x, y, z, m = metal, rx = 0) { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.position.set(x, y, z); b.rotation.x = rx; g.add(b); return b; }
 function cyl(g, r, l, x, y, z, m = metal, r2) { const c = new THREE.Mesh(new THREE.CylinderGeometry(r2 ?? r, r, l, 10), m); c.rotation.x = Math.PI / 2; c.position.set(x, y, z); g.add(c); return c; }
 
-export function buildViewmodel(id, hands = true) {
+export function buildViewmodel(id, hands = true) { return buildViewmodelHD(id, hands); }
+export function buildViewmodelLegacy(id, hands = true) {
   const g = new THREE.Group(); let muzzleZ = -0.3, ejectZ = -0.05, pos = [0.2, -0.2, -0.42];
   if (id === 'pistol') {
     box(g, 0.045, 0.06, 0.24, 0, 0, -0.1, metal); box(g, 0.047, 0.014, 0.2, 0, 0.035, -0.1, metal2); box(g, 0.04, 0.11, 0.055, 0, -0.085, 0.0, wood, 0.25); cyl(g, 0.009, 0.05, 0, 0.0, -0.245, metal2); box(g, 0.006, 0.014, 0.01, 0, 0.048, -0.2, accent); muzzleZ = -0.27; ejectZ = -0.12; pos = [0.17, -0.17, -0.38];

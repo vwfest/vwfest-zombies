@@ -3,7 +3,7 @@ import { lb } from './lb.js';
 import { makeTextures, rnd, pick, clamp, lerp, TAU } from './util.js';
 import { World, areaOf, DOOR_Z } from './world.js';
 import { Zombies } from './zombie.js';
-import { upgradeZombies } from './hd/integrate.js';
+import { upgradeZombies } from './hd/zombies.js';
 import { FX, Motes, Post } from './fx.js';
 import { Sound } from './audio.js';
 import { WEAPONS, CRATE_POOL, buildViewmodel } from './weapons.js';
@@ -42,7 +42,7 @@ const fx = new FX(scene, textures, tier);
 const motes = new Motes(textures, 260, { R: 20, y0: 0.3, y1: 6, size: 0.07, alpha: 0.22 }); scene.add(motes.points);
 const mist = new Motes(textures, 46, { R: 55, y0: 0.4, y1: 2.2, size: 5.5, alpha: 0.045, col: [0.55, 0.5, 0.62], additive: false, speed: 0.7 }); scene.add(mist.points);
 const zombies = new Zombies(scene, world, tier);
-window.__hd = upgradeZombies(zombies).then((s) => { applyTier(tier); return s; });
+window.__hd = upgradeZombies(zombies);
 const viewScene = new THREE.Scene(); const post = new Post(renderer, scene, cam, viewScene);
 
 // environment map from the procedural night sky (PBR reflections)
@@ -147,7 +147,7 @@ function shoot() {
     else if (endN && wallFx < 4) { wallFx++; _n.set(endN.x, endN.y, endN.z); fx.sparks(end, _n, 7); fx.dust(end, _n, 2); }
   }
   // muzzle effects
-  muzzleLight.intensity = 55; gunFlash.intensity = 6; G.muzzleT = 0.06; flashSprite.visible = true; flashSprite.material.rotation = rnd(TAU); flashSprite.scale.setScalar(rnd(0.25, 0.42) * (W.id === 'shotgun' ? 1.4 : 1)); fx.flash(_m, base); fx.smoke(_m, base, 1);
+  muzzleLight.intensity = 55; gunFlash.intensity = 6; G.muzzleT = 0.06; flashSprite.visible = true; { const f = P.gun.userData.flash; if (f) { f.visible = true; f.rotation.z = rnd(TAU); f.scale.setScalar(rnd(0.8, 1.3) * (W.id === 'shotgun' ? 1.5 : 1)); } P.gun.userData.slideT = 1; } flashSprite.material.rotation = rnd(TAU); flashSprite.scale.setScalar(rnd(0.25, 0.42) * (W.id === 'shotgun' ? 1.4 : 1)); fx.flash(_m, base); fx.smoke(_m, base, 1);
   if (fx.maxCas) { const v = new THREE.Vector3().copy(_r).multiplyScalar(rnd(1.2, 2.4)).addScaledVector(_u, rnd(1.2, 2.2)).addScaledVector(base, rnd(-0.3, 0.5)); if (s.id !== 'shotgun' || Math.random() < 0.0) fx.casing(_e, v); }
   P.rP += W.kick * rnd(0.85, 1.15); P.rY += rnd(-1, 1) * W.kick * 0.45; P.shake = Math.min(1, P.shake + W.shake * 0.5);
   if (W.perShell === true && s.mag > 0) setTimeout(() => sfx.pump(), 260);
@@ -279,10 +279,10 @@ function updateCamera(dt, t) {
   if (P.reloadT > 0 && !WEAPONS[cur().id].perShell) { const q = 1 - P.reloadT / P.reloadTot, e = Math.sin(q * Math.PI); rx -= e * 0.5; oy -= e * 0.12; rz += e * 0.35; ox -= e * 0.04; } else if (P.reloadT > 0) { const e = Math.abs(Math.sin(t * 6)) * 0.5 + 0.3; rx -= 0.25; oy -= 0.05; ry += 0.1 * e; }
   if (P.switchT > 0) { const q = P.switchT / 0.32; oy -= Math.sin(clamp(q, 0, 1) * Math.PI / 2) * 0.35; rx -= q * 0.5; }
   const gs = 1 - Math.exp(-dt * 18); g.userData.rx = lerp(g.userData.rx || 0, rx, gs); g.userData.ry = lerp(g.userData.ry || 0, ry, gs); g.userData.rz = lerp(g.userData.rz || 0, rz, gs);
-  g.rotation.set(g.userData.rx, g.userData.ry, g.userData.rz); g.position.set(b.x + ox, b.y + oy, b.z + oz);
+  g.rotation.set(g.userData.rx, g.userData.ry, g.userData.rz); if (g.userData.slideT > 0) { g.userData.slideT = Math.max(0, g.userData.slideT - dt * 14); const e = Math.sin(g.userData.slideT * Math.PI); if (g.userData.slide) g.userData.slide.position.z = e * 0.028; if (g.userData.pump) g.userData.pump.position.z = 0; } g.position.set(b.x + ox, b.y + oy, b.z + oz);
   P.sx *= Math.exp(-dt * 8); P.sy *= Math.exp(-dt * 8);
   // muzzle flash decay
-  if (G.muzzleT > 0) { G.muzzleT -= dt; if (G.muzzleT <= 0) { flashSprite.visible = false; } } muzzleLight.intensity *= Math.exp(-dt * 40); if (muzzleLight.intensity < 0.5) muzzleLight.intensity = 0; gunFlash.intensity = muzzleLight.intensity > 0 ? muzzleLight.intensity / 9 : 0;
+  if (G.muzzleT > 0) { G.muzzleT -= dt; if (G.muzzleT <= 0) { flashSprite.visible = false; if (P.gun?.userData.flash) P.gun.userData.flash.visible = false; } } muzzleLight.intensity *= Math.exp(-dt * 40); if (muzzleLight.intensity < 0.5) muzzleLight.intensity = 0; gunFlash.intensity = muzzleLight.intensity > 0 ? muzzleLight.intensity / 9 : 0;
   // crosshair spread
   const cr = $('cross'); const sp = 6 + (WEAPONS[cur().id].spread * 650) * (1 + P.mv * 0.9 + P.heat * 0.8) * 0.5; if (cr._sp !== Math.round(sp)) { cr._sp = Math.round(sp); cr.style.setProperty('--s', cr._sp + 'px'); cr.children[0].style.left = -(cr._sp + 9) + 'px'; cr.children[0].style.top = '-1px'; cr.children[1].style.left = cr._sp + 'px'; cr.children[1].style.top = '-1px'; cr.children[2].style.top = -(cr._sp + 9) + 'px'; cr.children[2].style.left = '-1px'; cr.children[3].style.top = cr._sp + 'px'; cr.children[3].style.left = '-1px'; }
 }

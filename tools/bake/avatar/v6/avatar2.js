@@ -178,7 +178,7 @@ async function buildOnce(av, { lod = 0, eq = {} } = {}, bodyOverride = 0) {
   const hg = new THREE.SphereGeometry(1, LOD.head[0], LOD.head[1]); { const p = hg.attributes.position, ud = new Float32Array(p.count * 3); for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); ud.set([x, y, z], i * 3); const q = hf(x, y, z); p.setXYZ(i, q.x, q.y, q.z); } hg.setAttribute('udir', new THREE.BufferAttribute(ud, 3)); hg.computeVertexNormals(); }
   const facial = av.facial, hs = av.hairStyle;
   const headMat = skinMaterial(skinC, { head: true, scalp: hs !== 6, mohawk: hs === 3, stubble: facial === 1 || facial === 4 || facial === 5 || facial === 3, beard: facial === 4, chops: facial === 5, freckles: !!av.freckles, hairC, beardC: hairC });
-  const headM = new THREE.Mesh(hg, headMat); headG.add(headM);
+  const headM = new THREE.Mesh(hg, headMat); headG.add(headM); root.userData.headMesh = headM;
   const tmp = new THREE.Mesh(hg); tmp.updateMatrixWorld(true); const ray = new THREE.Raycaster();
   const surf = (x, y) => { ray.set(new THREE.Vector3(x, y, 0.4), new THREE.Vector3(0, 0, -1)); const h = ray.intersectObject(tmp)[0]; return h ? h.point : new THREE.Vector3(x, y, 0.1); };
   const M = (g, m, par = headG) => { const o = new THREE.Mesh(g, m); o.castShadow = o.receiveShadow = true; par.add(o); return o; };
@@ -307,3 +307,4 @@ async function buildOnce(av, { lod = 0, eq = {} } = {}, bodyOverride = 0) {
   return root;
 }
 const mix = (a, b, t) => a + (b - a) * t;
+export { buildOnce };
