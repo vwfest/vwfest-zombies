@@ -141,3 +141,6 @@ kbd{background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.2);borde
 @media(max-height:640px){#over .globalBox{display:none}}
 .pw.pw2x{color:#ffd36b;border-color:#ffd36b88}
 #prompt .cost.poor{color:#ff5a6e}
+/* title always fits its panel (phone + desktop): size from the panel's own width */
+#menu .panel{container-type:inline-size}
+#menu h1{white-space:nowrap;letter-spacing:.04em;font-size:clamp(34px,13.5cqi,88px)}
