@@ -26,6 +26,7 @@ function ext(g, pts, w, m, { x = 0, bevel = 0.0025, curve = 6 } = {}) { const s 
   const geo = new THREE.ExtrudeGeometry(s, { depth: w - bevel * 2, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, curveSegments: curve }); geo.translate(0, 0, -(w - bevel * 2) / 2); geo.rotateY(-Math.PI / 2);
   const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 4, uv.getY(i) * 4); const o = new THREE.Mesh(geo, m); o.position.x = x; g.add(o); return o; }
 const rbox = (g, w, h, d, x, y, z, m, r = 0.004, rx = 0) => { const o = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 2, r), m); o.position.set(x, y, z); o.rotation.x = rx; g.add(o); return o; };
+const box1 = (g, w, h, d, x, y, z, m, rx = 0) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); o.rotation.x = rx; g.add(o); return o; }; // sharp machined ribs: 12 tris
 const tube = (g, r, l, x, y, z, m, seg = 20, r2) => { const o = new THREE.Mesh(new THREE.CylinderGeometry(r2 ?? r, r, l, seg, 1), m); o.rotation.x = Math.PI / 2; o.position.set(x, y, z); g.add(o); return o; };
 const ring = (g, r, t, x, y, z, m) => { const o = new THREE.Mesh(new THREE.TorusGeometry(r, t, 8, 24), m); o.position.set(x, y, z); g.add(o); return o; };
 function serrations(g, n, w, h, z0, dz, y, m) { for (let i = 0; i < n; i++) rbox(g, w, h, 0.0022, 0, y, z0 + i * dz, m, 0.0008); }
@@ -57,12 +58,12 @@ const BUILD = {
     const fore = ext(g, [[-0.28, -0.02], [-0.46, -0.02], [-0.46, 0.02], [-0.28, 0.02]], 0.05, M.wood, { bevel: 0.008 }); for (let i = 0; i < 9; i++) rbox(g, 0.052, 0.004, 0.006, 0, -0.022, -0.3 - i * 0.017, M.wood, 0.002); g.userData.pump = fore;
     ext(g, [[0.06, 0.04], [0.32, 0.03], [0.34, 0.05], [0.36, -0.1], [0.3, -0.11], [0.1, -0.03], [0.06, -0.01]], 0.042, M.wood, { bevel: 0.008 }); rbox(g, 0.044, 0.15, 0.02, 0, -0.03, 0.355, M.poly, 0.006, -0.12);
     trigger(g, 0.035, -0.02, M); rbox(g, 0.051, 0.012, 0.05, 0, 0.022, -0.05, M.steel, 0.002); return { muzzle: -0.75, eject: -0.05, pos: [0.2, -0.2, -0.4], lz: -0.38 }; },
-  rifle(g, M) { ext(g, [[0.12, 0.0], [-0.17, 0.0], [-0.17, 0.045], [0.12, 0.045]], 0.052, M.park, { bevel: 0.004 }); for (let i = 0; i < 18; i++) rbox(g, 0.042, 0.004, 0.006, 0, 0.049, -0.16 + i * 0.016, M.blued, 0.001);
-    ext(g, [[-0.17, -0.005], [-0.44, -0.005], [-0.44, 0.05], [-0.17, 0.05]], 0.056, M.polyTan, { bevel: 0.006 }); for (let i = 0; i < 7; i++) for (const s of [-1, 1]) rbox(g, 0.004, 0.018, 0.022, s * 0.028, 0.022, -0.2 - i * 0.034, M.poly, 0.002);
+  rifle(g, M) { ext(g, [[0.12, 0.0], [-0.17, 0.0], [-0.17, 0.045], [0.12, 0.045]], 0.052, M.park, { bevel: 0.004 }); for (let i = 0; i < 18; i++) box1(g, 0.042, 0.004, 0.006, 0, 0.049, -0.16 + i * 0.016, M.blued);
+    ext(g, [[-0.17, -0.005], [-0.44, -0.005], [-0.44, 0.05], [-0.17, 0.05]], 0.056, M.polyTan, { bevel: 0.006 }); for (let i = 0; i < 7; i++) for (const s of [-1, 1]) box1(g, 0.004, 0.018, 0.022, s * 0.028, 0.022, -0.2 - i * 0.034, M.poly);
     tube(g, 0.0095, 0.26, 0, 0.022, -0.56, M.blued, 18); tube(g, 0.016, 0.05, 0, 0.022, -0.71, M.park, 6); for (let i = 0; i < 3; i++) rbox(g, 0.004, 0.006, 0.03, 0.017, 0.03, -0.71, M.poly, 0.001).rotation.z = i;
     rbox(g, 0.008, 0.045, 0.012, 0, 0.07, -0.43, M.park, 0.002); // front sight post
     tube(g, 0.019, 0.1, 0, 0.1, -0.05, M.blued, 24); tube(g, 0.023, 0.03, 0, 0.1, -0.11, M.blued, 24); tube(g, 0.021, 0.025, 0, 0.1, 0.01, M.blued, 24); const lens = tube(g, 0.019, 0.002, 0, 0.1, -0.126, M.glass, 24); rbox(g, 0.024, 0.03, 0.05, 0, 0.068, -0.05, M.park, 0.003);
-    ext(g, [[0.0, 0.0], [-0.06, 0.0], [-0.06, -0.12], [-0.03, -0.14], [0.0, -0.12]], 0.03, M.park, { bevel: 0.003 }).rotation.x = -0.15; for (let i = 0; i < 6; i++) rbox(g, 0.032, 0.003, 0.03, 0, -0.03 - i * 0.02, -0.03 + i * 0.003, M.blued, 0.001, -0.15);
+    ext(g, [[0.0, 0.0], [-0.06, 0.0], [-0.06, -0.12], [-0.03, -0.14], [0.0, -0.12]], 0.03, M.park, { bevel: 0.003 }).rotation.x = -0.15; for (let i = 0; i < 6; i++) box1(g, 0.032, 0.003, 0.03, 0, -0.03 - i * 0.02, -0.03 + i * 0.003, M.blued, -0.15);
     ext(g, [[0.03, -0.0], [0.07, -0.0], [0.09, -0.11], [0.055, -0.115]], 0.032, M.poly, { bevel: 0.004 }); trigger(g, 0.0, -0.012, M);
     tube(g, 0.014, 0.14, 0, 0.025, 0.19, M.poly, 16); ext(g, [[0.2, 0.05], [0.36, 0.045], [0.36, -0.07], [0.33, -0.08], [0.2, 0.0]], 0.044, M.polyTan, { bevel: 0.006 }); rbox(g, 0.046, 0.13, 0.014, 0, -0.012, 0.365, M.poly, 0.005);
     rbox(g, 0.014, 0.014, 0.034, 0.03, 0.03, 0.0, M.steel, 0.003); return { muzzle: -0.74, eject: -0.03, pos: [0.2, -0.2, -0.4], lz: -0.3 }; },

@@ -1,10 +1,10 @@
 // v6-derived zombies from pre-baked packs: 4 bodies (2 male, 2 female; slim/regular/heavy; tee, hawaiian, overalls, vest) x near/mid/far LOD.
 import * as THREE from 'three';
-import data from '../../assets/zombies.bin';
-import { unpack, posAttr, nrmAttr } from './pack.js';
-const { meta, view } = unpack(data); const T = {};
+import { unpack, posAttr, nrmAttr, PACKS } from './pack.js';
+const T = {}; let meta;
+function init() { const u = unpack(PACKS.zombies), view = u.view; meta = u.meta;
 for (const m of meta) { const g = new THREE.BufferGeometry(); g.setAttribute('position', posAttr(view, m)); g.setAttribute('normal', nrmAttr(view, m)); g.setAttribute('skinIndex', new THREE.BufferAttribute(view(Uint8Array, m.si), 4)); g.setAttribute('skinWeight', new THREE.BufferAttribute(view(Uint8Array, m.sw), 4, true)); g.setIndex(new THREE.BufferAttribute(view(Uint16Array, m.idx), 1));
-  m.groups.forEach((gr) => g.addGroup(gr.start, gr.count, gr.slot >= 0 ? gr.slot : 3)); g.computeBoundingSphere(); T[m.tag] = { g, m }; }
+  m.groups.forEach((gr) => g.addGroup(gr.start, gr.count, gr.slot >= 0 ? gr.slot : 3)); g.computeBoundingSphere(); T[m.tag] = { g, m }; } }
 export const VARIANTS = 4, LODS = ['near', 'mid', 'far'];
 const shared = new Map(); const colMat = (hex) => { let m = shared.get(hex); if (!m) { const c = new THREE.Color('#' + hex).multiplyScalar(0.6); m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 }); shared.set(hex, m); } return m; };
 // procedural rot + tears in object space (no UVs, no alpha holes: tears show rotten skin underneath)
@@ -17,7 +17,7 @@ function zmat(kind, seed) { const m = new THREE.MeshStandardMaterial({ roughness
         : 'float t = smoothstep(0.71,0.74,n); float e = smoothstep(0.66,0.71,n)-t; diffuseColor.rgb *= 0.75+0.35*zn(q*4.); diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb*0.35, e); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.075,0.095,0.06)*mix(1.,0.6,zn(q*3.)), t); float bl = smoothstep(0.8,0.9,zn(q*0.5+7.)); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.22,0.03,0.03), bl*0.7);'}`); };
   m.customProgramCacheKey = () => 'zmat' + kind; return m; }
 const AVS = 1.1;
-export function upgradeZombies(zombies) {
+export function upgradeZombies(zombies) { init();
   zombies.list.forEach((z, i) => { const v = i % VARIANTS; const bones = T[v + ':near'].m.bones; const B = bones.map((b) => { const o = new THREE.Bone(); o.name = b.n; o.position.fromArray(b.t); return o; });
     bones.forEach((b, k) => { if (b.p >= 0) B[b.p].add(B[k]); }); const root = new THREE.Group(); root.add(B[0]); root.scale.setScalar(T[v + ':near'].m.scale * AVS); root.updateMatrixWorld(true); const sk = new THREE.Skeleton(B);
     z.sk = zmat(0, i * 7.3); z.sh = zmat(1, i * 3.1); z.pa = zmat(1, i * 5.7 + 2);
@@ -27,7 +27,7 @@ export function upgradeZombies(zombies) {
   const ou = zombies.update.bind(zombies); const vis = [];
   zombies.update = (dt, time, player, ...r) => { ou(dt, time, player, ...r); vis.length = 0;
     for (const z of zombies.list) if (z.root.visible) { z.d = Math.hypot(z.pos.x - player.x, z.pos.z - player.z); vis.push(z); }
-    vis.sort((a, b) => a.d - b.d); vis.forEach((z, k) => { const L = k < 2 && z.d < 7 ? 0 : k < 6 && z.d < 16 ? 1 : 2; z.lods.forEach((m, j) => (m.visible = j === L)); sync(z); }); };
+    vis.sort((a, b) => a.d - b.d); vis.forEach((z, k) => { const L = k < 2 && z.d < 7 ? 0 : k < 5 && z.d < 16 ? 1 : 2; z.lods.forEach((m, j) => (m.visible = j === L)); sync(z); }); };
   zombies.lodCounts = () => { const c = [0, 0, 0]; for (const z of zombies.list) if (z.root.visible) z.lods.forEach((m, j) => { if (m.visible) c[j]++; }); return c; };
   return Object.fromEntries(meta.map((m) => [m.tag, m.tris]));
 }

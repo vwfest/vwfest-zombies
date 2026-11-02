@@ -38,6 +38,11 @@ function flatAvatar(root, skinHex) {
   const bonesOut = BONES.map((b) => ({ n: b, p: BONES.indexOf(bones[b].parent?.name ?? ''), t: bones[b].position.toArray() }));
   return { P, N, SI, SW, I, groups, bones: bonesOut, scale };
 }
+function decimate(f, target) { const tot = f.I.length / 3; if (tot <= target) return f; const pos = Float32Array.from(f.P); const I = [], groups = [];
+  for (const gr of f.groups) { const idx = Uint32Array.from(f.I.slice(gr.start, gr.start + gr.count)); const t = Math.max(12, Math.floor((gr.count / 3) * target / tot)) * 3;
+    let [o] = MeshoptSimplifier.simplify(idx, pos, 3, t, 0.05, []); if (o.length > t * 1.2) o = MeshoptSimplifier.simplifySloppy(idx, pos, 3, null, t, 0.08)[0];
+    const st = I.length; for (const v of o) I.push(v); groups.push({ ...gr, start: st, count: o.length }); }
+  return { ...f, I, groups: groups.filter((g) => g.count > 0) }; }
 function packAvatar(w, f, tag) { const q = quant(w, f.P); w.meta.push({ tag, kind: 'av', ...q, nrm: w.add(nrm8(f.N)), si: w.add(Uint8Array.from(f.SI)), sw: w.add(Uint8Array.from(f.SW)), idx: w.add(Uint16Array.from(f.I)), groups: f.groups, bones: f.bones, scale: f.scale, tris: f.I.length / 3 }); }
 // ---- cars ----
 function flatCar(root, target) {
@@ -50,11 +55,14 @@ function flatCar(root, target) {
       let c = m.color ? m.color.clone() : new THREE.Color(0.5, 0.5, 0.5); if (m.map) c.multiplyScalar(0.45); if (m.transparent) c = new THREE.Color(0.05, 0.07, 0.09); if (m.metalness > 0.8 && m.roughness < 0.3) c.lerp(new THREE.Color(0.75, 0.75, 0.78), 0.3);
       for (let i = gr.start; i < gr.start + gr.count; i++) { P.push(p.getX(i), p.getY(i), p.getZ(i)); N.push(n.getX(i), n.getY(i), n.getZ(i)); C.push(c.r, c.g, c.b); } } });
   let g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); g.deleteAttribute('normal'); g = mergeVertices(g, 1e-4);
-  const src = g.index.array, pos = g.attributes.position.array; const tgt = target * 3; let [out] = MeshoptSimplifier.simplify(Uint32Array.from(src), pos, 3, tgt, 0.02, ['LockBorder']);
-  if (out.length > tgt * 1.15) { [out] = MeshoptSimplifier.simplify(Uint32Array.from(src), pos, 3, tgt, 0.05, []); }
-  if (out.length > tgt * 1.15) out = MeshoptSimplifier.simplifySloppy(Uint32Array.from(src), pos, 3, null, tgt, 0.05)[0];
+  const src = g.index.array, pos = g.attributes.position.array, col = g.attributes.color.array; const byCol = new Map();
+  for (let i = 0; i < src.length; i += 3) { const v = src[i]; const k = Math.round(col[v * 3] * 255) + ',' + Math.round(col[v * 3 + 1] * 255) + ',' + Math.round(col[v * 3 + 2] * 255); if (!byCol.has(k)) byCol.set(k, []); byCol.get(k).push(src[i], src[i + 1], src[i + 2]); }
+  const total = src.length / 3, out = [];
+  for (const tri of byCol.values()) { const n = tri.length / 3; if (n * 1.0 / total < 0.004) continue; // drop tiny specks (bolts, badges) at junkyard distance
+    const t = Math.max(6, Math.round(n * target / total)) * 3; const idx = Uint32Array.from(tri); let [o] = MeshoptSimplifier.simplify(idx, pos, 3, t, 0.03, ['LockBorder']);
+    if (o.length > t * 1.3) [o] = MeshoptSimplifier.simplify(idx, pos, 3, t, 0.06, []); if (o.length > t * 1.3) o = MeshoptSimplifier.simplifySloppy(idx, pos, 3, null, t, 0.06)[0]; for (const v of o) out.push(v); }
   // flat-ish normals: unindex + compute, then re-merge by angle
-  let s = new THREE.BufferGeometry(); s.setAttribute('position', g.attributes.position); s.setAttribute('color', g.attributes.color); s.setIndex(Array.from(out)); s = s.toNonIndexed(); s.computeVertexNormals(); s = mergeVertices(s, 1e-4);
+  let s = new THREE.BufferGeometry(); s.setAttribute('position', g.attributes.position); s.setAttribute('color', g.attributes.color); s.setIndex(out); s = s.toNonIndexed(); s.computeVertexNormals(); s = mergeVertices(s, 1e-4);
   return { s, plate: { P: PP, N: PN, U: PU } };
 }
 function packCar(w, c, tag) { const s = c.s; const q = quant(w, s.attributes.position.array); const col = Uint8Array.from(s.attributes.color.array, (v) => Math.round(Math.min(1, v) * 255));
@@ -70,9 +78,9 @@ const CARS = {
 };
 window.bake = async () => { await MeshoptSimplifier.ready; const log = [];
   const wz = new W(); for (let v = 0; v < VARIANTS.length; v++) { const av = { ...BASE, ...VARIANTS[v] };
-    const near = await buildAvatar(av, { lod: 1 }), mid = await buildOnce(av, { lod: 2 }, 3200), far = await buildAvatar(av, { lod: 2 });
-    for (const [n, r] of [['near', near], ['mid', mid], ['far', far]]) { const f = flatAvatar(r, '#' + new THREE.Color().getHexString()); packAvatar(wz, f, v + ':' + n); log.push(`z${v} ${n} ${f.I.length / 3} tris, ${f.groups.length} groups`); } }
-  const wc = new W(); for (const [k, fn] of Object.entries(CARS)) { const c = flatCar(fn(), 4200); packCar(wc, c, k); log.push(`car ${k} ${c.s.index.count / 3} tris`); }
+    const near = await buildAvatar(av, { lod: 1 }), mid = await buildOnce(av, { lod: 2 }, 2400), far = await buildOnce(av, { lod: 2 }, 400);
+    for (const [n, r] of [['near', near], ['mid', mid], ['far', far]]) { let f = flatAvatar(r, '#' + new THREE.Color().getHexString()); if (n === 'mid') f = decimate(f, 4800); if (n === 'far') f = decimate(f, 950); packAvatar(wz, f, v + ':' + n); log.push(`z${v} ${n} ${f.I.length / 3} tris, ${f.groups.length} groups`); } }
+  const wc = new W(); for (const [k, fn] of Object.entries(CARS)) { const c = flatCar(fn(), 2000); packCar(wc, c, k); log.push(`car ${k} ${c.s.index.count / 3} tris`); }
   const b64 = (u) => { let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
   return { log, z: b64(wz.out()), c: b64(wc.out()) }; };
 document.title = 'ready';

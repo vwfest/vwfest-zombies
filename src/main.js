@@ -4,6 +4,8 @@ import { makeTextures, rnd, pick, clamp, lerp, TAU } from './util.js';
 import { World, areaOf, DOOR_Z } from './world.js';
 import { Zombies } from './zombie.js';
 import { upgradeZombies } from './hd/zombies.js';
+import { loadPacks } from './hd/pack.js';
+await loadPacks(); // pre-baked models, fetched separately (assets/*.bin)
 import { FX, Motes, Post } from './fx.js';
 import { Sound } from './audio.js';
 import { WEAPONS, CRATE_POOL, buildViewmodel } from './weapons.js';
