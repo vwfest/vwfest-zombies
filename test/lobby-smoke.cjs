@@ -19,6 +19,8 @@ const shot = async (p, name) => { await p.screenshot({ path: OUT + '/' + name })
   const room = await A.evaluate(() => __game.MP.S.room);
   ok(/^[A-Z2-9]{5}$/.test(room || ''), 'A created code room ' + room);
   ok(await A.evaluate(() => document.getElementById('lobbyCode').textContent === __game.MP.S.room && /Alpha/.test(document.getElementById('lobbyRoster').textContent) && document.getElementById('lobbyReady').textContent === 'READY'), 'desktop lobby shows code, roster, ready');
+  await A.waitForFunction(() => document.getElementById('roundNum').textContent === 'WAITING' && !document.getElementById('toast').classList.contains('on'), null, { timeout: 4000 });
+  ok(true, 'lobby badge says WAITING and the ready toast is not showing');
   const mag0 = await A.evaluate(() => { const s = __game.P.slots[__game.P.cur]; const m = s.mag; __game.shoot(); __game.startReload(); return s.mag === m && __game.G.round === 0; });
   ok(mag0, 'lobby blocks the local shot before the magazine changes');
   await A.click('#lobbyReady');

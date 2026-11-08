@@ -111,7 +111,7 @@ function adapt(raw) {
 }
 
 /* ---------------- HUD helpers ---------------- */
-const hud = { hp: -1, pts: -1, mag: -1, res: -1, name: '', prompt: '', round: -1, alt: '' };
+const hud = { hp: -1, pts: -1, mag: -1, res: -1, name: '', prompt: '', round: -1, alt: '', lobby: false };
 let toastT = 0;
 function toast(t) { const e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => e.classList.remove('on'), 2600); }
 function banner(t, sub = '') { const e = $('banner'); e.innerHTML = t + (sub ? `<small>${sub}</small>` : ''); e.classList.remove('on'); void e.offsetWidth; e.classList.add('on'); }
@@ -124,7 +124,9 @@ function updateHUD() {
   if (s.mag !== hud.mag) { hud.mag = s.mag; $('ammoMag').textContent = s.mag; $('ammoMag').classList.toggle('empty', s.mag === 0); }
   if (s.reserve !== hud.res) { hud.res = s.reserve; $('ammoRes').textContent = '/ ' + s.reserve; }
   const o = P.slots[1 - P.cur]; const alt = o ? WEAPONS[o.id].name + '  ' + o.mag + '/' + o.reserve : ''; if (alt !== hud.alt) { hud.alt = alt; $('wAlt').textContent = alt; }
-  if (G.round !== hud.round) { hud.round = G.round; const e = $('roundNum'); e.textContent = G.round || 1; e.classList.remove('pulse'); void e.offsetWidth; e.classList.add('pulse'); }
+  const waiting = !!(MP?.on && G.mpPhase === 'lobby');
+  if (waiting !== hud.lobby) { hud.lobby = waiting; $('roundBox').classList.toggle('waiting', waiting); $('roundBox').querySelector('.lbl').textContent = waiting ? '' : 'ROUND'; if (waiting) $('roundNum').textContent = 'WAITING'; else hud.round = -1; }
+  if (!waiting && G.round !== hud.round) { hud.round = G.round; const e = $('roundNum'); e.textContent = G.round || 1; e.classList.remove('pulse'); void e.offsetWidth; e.classList.add('pulse'); }
   const rb = $('reloadBar'); if (P.reloadT > 0) { rb.classList.add('on'); rb.firstElementChild.style.width = (100 * (1 - P.reloadT / P.reloadTot)) + '%'; } else rb.classList.remove('on');
   // damage overlays
   const dm = clamp(P.dmg, 0, 1); $('fx-damage').style.opacity = tier === 0 ? Math.min(1, dm + (P.hp < P.maxHp * LOW_HP_FRAC ? 0.25 : 0)) : 0;
@@ -472,7 +474,7 @@ function mpInteract(f, held, dt) { // co-op: ask the server; it checks distance 
 /* ---------------- co-op (beta, local server only for now) ---------------- */
 const MP_URL = qs.get('server') || 'wss://vwfest-zombies-coop.onrender.com';
 MP = createMP({ scene, zombies, P, G, cam, world,
-  onJoined: (m) => { G.mpPhase = m.phase || ''; startGame(); G.round = 0; $('mpTag').textContent = 'CO-OP · ROOM ' + m.room; $('mpTag').classList.remove('hidden'); if (m.phase === 'lobby') { $('lobbyCode').textContent = m.room; $('lobby').classList.remove('hidden'); } toast(m.phase === 'lobby' ? 'Room ' + m.room + ' · ready up when the crew is here' : 'Co-op room ' + m.room + ' · share the code with friends'); },
+  onJoined: (m) => { G.mpPhase = m.phase || ''; startGame(); G.round = 0; $('mpTag').textContent = 'CO-OP · ROOM ' + m.room; $('mpTag').classList.remove('hidden'); if (m.phase === 'lobby') { $('lobbyCode').textContent = m.room; $('lobby').classList.remove('hidden'); $('toast').classList.remove('on'); clearTimeout(toastT); } else toast('Co-op room ' + m.room + ' · share the code with friends'); },
   onLobby: (snap) => { const was = G.mpPhase; G.mpPhase = snap.phase; const waiting = snap.phase === 'lobby'; $('lobby').classList.toggle('hidden', !waiting); if (was === 'lobby' && !waiting && !isTouch && !qs.has('test')) { try { canvas.requestPointerLock?.()?.catch?.(() => {}); } catch (e) {} } if (!waiting) return; $('lobbyCode').textContent = snap.room || MP.S.room || '-----'; const me = snap.p.find((p) => p[0] === MP.S.id); $('lobbyReady').textContent = me && me[13] ? 'UNREADY' : 'READY'; $('lobbyRoster').innerHTML = snap.p.map((p) => { const st = !p[10] ? 'disconnected' : p[13] ? 'ready' : 'waiting'; const nm = String(p[1]).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); return `<li class="${p[13] ? 'ok' : 'wait'}">${nm}${p[0] === MP.S.id ? ' (you)' : ''} · ${st}</li>`; }).join(''); },
   onStatus: (s) => { toast(String(s)); const e = $('coMsg'); if (e) e.textContent = String(s); },
   onRound: (n) => { G.round = n; G.phase = 'round'; sfx.round(n); banner('ROUND ' + n, 'Co-op · hold the yard together'); },
