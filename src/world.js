@@ -116,10 +116,9 @@ export class World {
       const p = new THREE.Mesh(new THREE.BoxGeometry(len - 0.15, 0.2, 0.07), M.wood); const home = new THREE.Vector3(cx + n.x * 0.23, sill + 0.16 + i * 0.255, cz + n.z * 0.23);
       p.position.copy(home); p.rotation.set(0, ry, rnd(-0.05, 0.05)); p.castShadow = true; p.receiveShadow = true; p.userData = { home, rotZ: p.rotation.z, ry }; this.root.add(p); planks.push(p);
     }
-    this.windows.push({ id: o.id, area: o.area || (c > DOOR_Z && axis === 'x' ? 'A' : c > 0 ? 'A' : 'A'), c: new THREE.Vector3(cx, 0, cz), n, t: { x: -n.z, z: n.x }, out: { x: cx + n.x * 1.5, z: cz + n.z * 1.5 }, in: { x: cx - n.x * 1.6, z: cz - n.z * 1.6 }, planks, count: 6, attackers: 0, cool: 0, axis });
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(axis === 'x' ? 0.3 : 0.06, 0.06, axis === 'x' ? 0.06 : 0.3), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.8, 0.3, 0.15), toneMapped: false })); lamp.position.set(cx - n.x * 0.3, 2.85, cz - n.z * 0.3); lamp.userData.noAO = true; this.root.add(lamp);
+    this.windows.push({ id: o.id, area: o.area || (c > DOOR_Z && axis === 'x' ? 'A' : c > 0 ? 'A' : 'A'), c: new THREE.Vector3(cx, 0, cz), n, t: { x: -n.z, z: n.x }, out: { x: cx + n.x * 1.5, z: cz + n.z * 1.5 }, in: { x: cx - n.x * 1.6, z: cz - n.z * 1.6 }, planks, count: 6, attackers: 0, cool: 0, axis, lamp });
     const w0 = this.windows[this.windows.length - 1]; w0.area = areaOf(cz);
-    // little warning lamp strip above window
-    const lamp = new THREE.Mesh(new THREE.BoxGeometry(axis === 'x' ? 0.3 : 0.06, 0.06, axis === 'x' ? 0.06 : 0.3), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.8, 0.3, 0.15), toneMapped: false })); lamp.position.set(cx - n.x * 0.3, 2.85, cz - n.z * 0.3); this.staticGroup.add(lamp);
   }
   removePlank(w) { if (w.count <= 0) return false; const p = w.planks[w.count - 1]; w.count--; p.userData.fall = { vx: w.n.x * rnd(1, 3) + rnd(-1, 1), vy: rnd(1, 3), vz: w.n.z * rnd(1, 3) + rnd(-1, 1), t: 0, rx: rnd(-6, 6), rz: rnd(-6, 6) }; this.fall.push(p); return true; }
   addPlank(w) { if (w.count >= 6) return false; const p = w.planks[w.count]; w.count++; p.userData.fall = null; const i = this.fall.indexOf(p); if (i >= 0) this.fall.splice(i, 1); p.visible = true; p.position.copy(p.userData.home); p.rotation.set(0, p.userData.ry, p.userData.rotZ); return true; }
@@ -268,6 +267,7 @@ export class World {
     this.halos.forEach((h, i) => { const dd = Math.hypot(this.lamps[i].pos.x - px, this.lamps[i].pos.z - pz); h.visible = dd < 70; });
     // crate
     const c = this.crate; c.beam.material.uniforms.k.value = 0.22 + 0.1 * Math.sin(time * 2);
+    for (const w of this.windows) { if (!w.lamp) continue; const open = 6 - w.count; const k = open <= 0 ? 0.55 + 0.08 * Math.sin(time * 2.2 + w.c.x) : 0.3 + 0.7 * Math.abs(Math.sin(time * (3.2 + open))); w.lamp.material.color.setRGB(1.85 * k, 0.22 * k, 0.07 * k); }
     if (c.model) { c.model.rotation.y += dt * 2; c.model.position.y = Math.sin(time * 3) * 0.04; }
     // moon shadow follows player
     this.moon.position.set(px + this.moonDir.x * 60, this.moonDir.y * 60, pz + this.moonDir.z * 60); this.moon.target.position.set(px, 0, pz); this.moon.target.updateMatrixWorld();

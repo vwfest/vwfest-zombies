@@ -13,14 +13,14 @@ body.lowq #fx-vignette{opacity:1}
 #fx-dir{display:none}
 #fx-dir i{position:absolute;left:50%;top:50%;width:0;height:0;margin:-140px 0 0 -26px;border-left:26px solid transparent;border-right:26px solid transparent;border-bottom:44px solid rgba(255,40,70,.85);filter:drop-shadow(0 0 12px #f35);transform-origin:26px 140px}
 /* HUD */
-#hud{position:fixed;inset:0;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+#hud{position:fixed;inset:0;z-index:6;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
 #hud>*{position:absolute}
 #roundBox{left:18px;top:16px;padding:8px 18px 6px;display:flex;flex-direction:column;align-items:center;min-width:92px}
 #roundBox .lbl{font-size:11px;letter-spacing:.32em;color:#a6b6bf;font-weight:700}
 #roundNum{font-size:54px;line-height:1;font-weight:900;color:#ff4a63;text-shadow:0 0 22px rgba(255,40,70,.6);font-variant-numeric:tabular-nums}
 #roundNum.pulse{animation:rpulse 1.2s ease-out}
 @keyframes rpulse{0%{transform:scale(2.2);opacity:0;filter:blur(6px)}30%{opacity:1;filter:none}100%{transform:scale(1)}}
-#topRight{right:16px;top:16px;display:flex;gap:10px;pointer-events:auto}
+#topRight{right:16px;top:16px;display:flex;gap:10px;pointer-events:auto;z-index:8}
 .icon{width:42px;height:42px;border-radius:12px;border:1px solid var(--bd);background:var(--glass);backdrop-filter:blur(10px);color:#fff;font-size:15px;cursor:pointer}
 .icon:hover{border-color:var(--acc)}
 #powers{top:18px;left:50%;transform:translateX(-50%);display:flex;gap:10px}
@@ -34,9 +34,9 @@ body.lowq #fx-vignette{opacity:1}
 #cross .l,#cross .r{width:9px;height:2px;top:-1px}#cross .u,#cross .d{width:2px;height:9px;left:-1px}
 #hitm{position:absolute;left:0;top:0;opacity:0;transition:opacity .25s}
 #hitm.on{opacity:1;transition:none}
-#hitm i{background:#fff;width:2px;height:10px;box-shadow:0 0 6px #fff;left:-1px;top:-5px}
-#hitm i:nth-child(1){transform:translate(-12px,-12px) rotate(45deg)}#hitm i:nth-child(2){transform:translate(12px,-12px) rotate(-45deg)}#hitm i:nth-child(3){transform:translate(-12px,12px) rotate(-45deg)}#hitm i:nth-child(4){transform:translate(12px,12px) rotate(45deg)}
-#hitm.kill i{background:#ff3355;box-shadow:0 0 10px #f35;height:14px}
+#hitm i{background:#fff;width:3px;height:13px;box-shadow:0 0 8px #fff;left:-1.5px;top:-6px}
+#hitm i:nth-child(1){transform:translate(-16px,-16px) rotate(45deg)}#hitm i:nth-child(2){transform:translate(16px,-16px) rotate(-45deg)}#hitm i:nth-child(3){transform:translate(-16px,16px) rotate(-45deg)}#hitm i:nth-child(4){transform:translate(16px,16px) rotate(45deg)}
+#hitm.kill i{background:#ff3355;box-shadow:0 0 12px #f35;height:18px}
 #prompt{left:50%;bottom:26%;transform:translateX(-50%);padding:10px 20px;font-weight:700;font-size:16px;letter-spacing:.02em;white-space:nowrap;opacity:0;transition:opacity .15s,transform .15s}
 #prompt.on{opacity:1;transform:translateX(-50%) translateY(-4px)}
 #prompt kbd{background:var(--acc);color:#04120d;border-radius:6px;padding:2px 8px;margin-right:6px;font-weight:900}
@@ -45,7 +45,7 @@ body.lowq #fx-vignette{opacity:1}
 #banner{left:0;right:0;top:24%;text-align:center;font-weight:900;font-size:min(9vw,84px);letter-spacing:.12em;color:#fff;text-shadow:0 0 30px rgba(255,50,80,.8),0 4px 0 rgba(0,0,0,.4);opacity:0;pointer-events:none}
 #banner.on{animation:ban 2.6s ease-out forwards}#banner small{display:block;font-size:.28em;letter-spacing:.4em;color:var(--acc);margin-top:4px;text-shadow:none}
 @keyframes ban{0%{opacity:0;transform:scale(1.6);filter:blur(10px)}12%{opacity:1;transform:none;filter:none}80%{opacity:1}100%{opacity:0;transform:translateY(-12px)}}
-#toast{left:50%;top:78px;transform:translateX(-50%);padding:8px 16px;border-radius:999px;background:rgba(0,0,0,.6);border:1px solid var(--bd);font-size:13px;font-weight:600;opacity:0;transition:opacity .3s;white-space:nowrap}
+#toast{left:50%;top:78px;transform:translateX(-50%);padding:8px 16px;border-radius:999px;background:rgba(0,0,0,.6);border:1px solid var(--bd);font-size:13px;font-weight:600;opacity:0;transition:opacity .3s;white-space:nowrap;z-index:6}
 #toast.on{opacity:1}
 #pop{left:50%;top:50%}
 #pop span{position:absolute;font-weight:900;font-size:19px;color:var(--amb);text-shadow:0 2px 6px #000;animation:pop .9s ease-out forwards;white-space:nowrap}
@@ -77,6 +77,9 @@ body.touch #touch button{display:flex;align-items:center;justify-content:center}
 #bReload{right:calc(env(safe-area-inset-right) + 134px);bottom:calc(env(safe-area-inset-bottom) + 38px);width:56px;height:56px}
 #bUse{right:calc(env(safe-area-inset-right) + 40px);bottom:calc(env(safe-area-inset-bottom) + 150px);width:62px;height:62px;border-color:var(--acc)!important}
 #bSwap{right:calc(env(safe-area-inset-right) + 120px);bottom:calc(env(safe-area-inset-bottom) + 108px);width:50px;height:50px}
+#bLamp{right:calc(env(safe-area-inset-right) + 188px);bottom:calc(env(safe-area-inset-bottom) + 176px);width:48px;height:48px;font-size:18px}
+#bLamp.off{opacity:.42;filter:grayscale(1)}
+body.touch #toast{top:128px;max-width:min(420px,54vw);white-space:normal;text-align:center;line-height:1.35}
 body.touch #statR{bottom:auto;top:62px;right:16px;min-width:0;padding:6px 12px;transform-origin:top right;transform:scale(.8)}
 body.touch #statL{bottom:auto;top:16px;left:auto;right:auto;transform:none;left:130px;width:200px;padding:8px 12px}
 body.touch #statL .pts{margin-top:4px}body.touch #pts{font-size:22px}
@@ -145,4 +148,4 @@ kbd{background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.2);borde
 #menu .panel{container-type:inline-size}
 #menu h1{white-space:nowrap;letter-spacing:.04em;font-size:clamp(34px,13.5cqi,88px)}
 #minimap{position:absolute;left:18px;top:104px;width:104px;height:104px;border-radius:50%;background:rgba(8,14,20,.55);border:1.5px solid rgba(120,220,200,.45);box-shadow:0 2px 12px rgba(0,0,0,.4);pointer-events:none}
-body.touch #minimap{left:16px;top:96px;width:92px;height:92px}
+body.touch #minimap{left:16px;top:118px;width:84px;height:84px}

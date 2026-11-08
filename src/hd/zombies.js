@@ -25,22 +25,85 @@ function zmat(kind, seed) { const m = new THREE.MeshStandardMaterial({ roughness
         : 'float m2 = zn(vZ*7.+zSeed)*0.65+zn(vZ*15.+zSeed)*0.35; float t = smoothstep(0.70,0.78,m2)*0.8; float e = smoothstep(0.62,0.70,m2)*0.5-t*0.5; diffuseColor.rgb *= 0.85+0.2*zn(q*2.); diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb*0.35, e); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.075,0.095,0.06)*mix(1.,0.6,zn(q*3.)), t); float bl = smoothstep(0.8,0.9,zn(q*0.5+7.)); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.22,0.03,0.03), bl*0.7);'}`); };
   m.customProgramCacheKey = () => 'zmat' + kind; return m; }
 const AVS = 1.1;
+const _e = new THREE.Vector3(), _c = new THREE.Color(), _o = new THREE.Object3D(), _hot = new THREE.Color(1, 0.92, 0.75);
+const eyeCache = new Array(VARIANTS);
+function glowMap() {
+  const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(16, 16, 1, 16, 16, 16); gr.addColorStop(0, '#fff'); gr.addColorStop(0.28, 'rgba(255,255,255,.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 32, 32); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+// Eye sockets in head-bone space, from the near-LOD head (mid/far LODs drop the sculpted eyes).
+function eyeLocals(mesh) {
+  const pos = mesh.geometry.attributes.position, si = mesh.geometry.attributes.skinIndex, sw = mesh.geometry.attributes.skinWeight;
+  const hi = mesh.skeleton.bones.findIndex((b) => b.name === 'head');
+  const inv = mesh.skeleton.boneInverses[hi], bind = mesh.bindMatrix, v = new THREE.Vector3();
+  let L = null, R = null, ls = -1e9, rs = -1e9;
+  for (let i = 0; i < pos.count; i++) {
+    let w = 0; for (let k = 0; k < 4; k++) if (si.getComponent(i, k) === hi) w = Math.max(w, sw.getComponent(i, k));
+    if (w < 0.45) continue;
+    v.fromBufferAttribute(pos, i).applyMatrix4(bind).applyMatrix4(inv);
+    if (v.z < 0.015) continue;
+    const s = v.z - Math.abs(Math.abs(v.x) - 0.032) * 2.4 - Math.abs(v.y - 0.012) * 2.2;
+    if (v.x < -0.01 && s > ls) { ls = s; L = v.clone(); } else if (v.x > 0.01 && s > rs) { rs = s; R = v.clone(); }
+  }
+  L = L || new THREE.Vector3(-0.034, 0.02, 0.08); R = R || new THREE.Vector3(0.034, 0.02, 0.08); L.y += 0.022; R.y += 0.022; L.z += 0.01; R.z += 0.01; return { L, R };
+}
+function hideRead(eye, blob, i) {
+  _o.position.set(0, -20, 0); _o.scale.set(0, 0, 0); _o.rotation.set(0, 0, 0); _o.updateMatrix();
+  eye.setMatrixAt(i * 2, _o.matrix); eye.setMatrixAt(i * 2 + 1, _o.matrix); blob.setMatrixAt(i, _o.matrix);
+}
+function placeReads(zombies, time) {
+  const eye = zombies.eyeMesh, blob = zombies.blob, list = zombies.list, cam = zombies.cam, q = cam && cam.quaternion;
+  let dirty = false;
+  for (let i = 0; i < list.length; i++) {
+    const z = list[i], on = z.root.visible && z.state !== 'dead' && z.eyeL;
+    if (!on) { if (z._eyeOn) { z._eyeOn = false; dirty = true; hideRead(eye, blob, i); } continue; }
+    z._eyeOn = true; dirty = true;
+    z.bones.head.updateWorldMatrix(true, false);
+    const head = z.bones.head.matrixWorld, pulse = 1 + 0.12 * Math.sin(time * (z.runner ? 9 : 3.1) + z.phase);
+    const sc = 0.05 * pulse * (z.flash > 0 ? 1.35 : 1) * (z.brute ? 1.22 : 1);
+    _c.setRGB(z.brute ? 0.85 : z.runner ? 1 : 0.95, z.brute ? 0.08 : z.runner ? 0.42 : 0.16, 0.04);
+    if (z.flash > 0) _c.lerp(_hot, Math.min(0.65, z.flash * 2.5));
+    if (q) _o.quaternion.copy(q);
+    _e.copy(z.eyeL).applyMatrix4(head); _o.position.copy(_e); _o.scale.setScalar(sc); _o.updateMatrix(); eye.setMatrixAt(i * 2, _o.matrix); eye.setColorAt(i * 2, _c);
+    _e.copy(z.eyeR).applyMatrix4(head); _o.position.copy(_e); _o.updateMatrix(); eye.setMatrixAt(i * 2 + 1, _o.matrix); eye.setColorAt(i * 2 + 1, _c);
+    const sink = z.state === 'dying' ? Math.min(0.85, z.dieT * 0.45) : 0;
+    _o.position.set(z.pos.x, 0.04, z.pos.z); _o.rotation.set(-Math.PI / 2, 0, 0); _o.scale.setScalar(Math.max(0.01, z.scale * (z.brute ? 1.15 : 0.92) * (1 - sink))); _o.updateMatrix();
+    blob.setMatrixAt(i, _o.matrix);
+  }
+  if (!dirty) return;
+  eye.instanceMatrix.needsUpdate = true; eye.instanceColor.needsUpdate = true; blob.instanceMatrix.needsUpdate = true;
+}
 export function upgradeZombies(zombies) { init();
   zombies.list.forEach((z, i) => { const v = i % VARIANTS; const bones = T[v + ':near'].m.bones; const B = bones.map((b) => { const o = new THREE.Bone(); o.name = b.n; o.position.fromArray(b.t); return o; });
     bones.forEach((b, k) => { if (b.p >= 0) B[b.p].add(B[k]); }); const root = new THREE.Group(); root.add(B[0]); root.scale.setScalar(T[v + ':near'].m.scale * AVS); root.updateMatrixWorld(true); const sk = new THREE.Skeleton(B);
     z.sk = zmat(0, i * 7.3); z.sh = zmat(1, i * 3.1); z.pa = zmat(1, i * 5.7 + 2);
     z.lods = LODS.map((l) => { const t = T[v + ':' + l]; const mats = [z.sk, z.sh, z.pa, ...[]]; const gm = t.m.groups.map((gr) => (gr.slot >= 0 ? [z.sk, z.sh, z.pa][gr.slot] : colMat(gr.col, gr.hair)));
       const g = t.g.clone(); g.clearGroups(); t.m.groups.forEach((gr, k) => g.addGroup(gr.start, gr.count, k)); const mesh = new THREE.SkinnedMesh(g, gm); mesh.frustumCulled = false; mesh.castShadow = true; mesh.bind(sk); mesh.visible = false; root.add(mesh); return mesh; });
-    z.bones = Object.fromEntries(B.map((b) => [b.name, b])); z.hipY = z.bones.hips.position.y; z.root.add(root); z.pelvis.traverse((o) => { if (o.isMesh) o.visible = false; }); z.variant = v; });
+    z.bones = Object.fromEntries(B.map((b) => [b.name, b])); z.hipY = z.bones.hips.position.y; z.root.add(root); z.pelvis.traverse((o) => { if (o.isMesh) o.visible = false; }); z.variant = v;
+    if (!eyeCache[v]) eyeCache[v] = eyeLocals(z.lods[0]); z.eyeL = eyeCache[v].L; z.eyeR = eyeCache[v].R; });
+  const n = zombies.list.length;
+  const eye = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: glowMap(), color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.NormalBlending, toneMapped: true, fog: true, side: THREE.DoubleSide }), n * 2);
+  eye.frustumCulled = false; eye.userData.noAO = true; eye.renderOrder = 6; eye.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 6), 3);
+  const blobMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false });
+  const blob = new THREE.InstancedMesh(new THREE.CircleGeometry(0.7, 14), blobMat, n);
+  blob.frustumCulled = false; blob.userData.noAO = true; blob.renderOrder = 1; blob.receiveShadow = false;
+  zombies.scene.add(eye, blob); zombies.eyeMesh = eye; zombies.blob = blob;
+  const prevTier = zombies.setTier.bind(zombies);
+  zombies.setTier = (t) => { zombies.tier = t; blobMat.opacity = t === 0 ? 0.5 : 0.26; prevTier(t); };
   const ou = zombies.update.bind(zombies); const vis = [];
   zombies.update = (dt, time, player, ...r) => { ou(dt, time, player, ...r); vis.length = 0;
     for (const z of zombies.list) if (z.root.visible) { z.d = Math.hypot(z.pos.x - player.x, z.pos.z - player.z); vis.push(z); }
-    vis.sort((a, b) => a.d - b.d); vis.forEach((z, k) => { const L = k < 2 && z.d < 7 ? 0 : k < 5 && z.d < 16 ? 1 : 2; z.lods.forEach((m, j) => (m.visible = j === L)); sync(z); }); };
+    vis.sort((a, b) => a.d - b.d); vis.forEach((z, k) => { const L = k < 2 && z.d < 7 ? 0 : k < 5 && z.d < 16 ? 1 : 2; z.lods.forEach((m, j) => (m.visible = j === L)); sync(z); });
+    placeReads(zombies, time); };
   zombies.lodCounts = () => { const c = [0, 0, 0]; for (const z of zombies.list) if (z.root.visible) z.lods.forEach((m, j) => { if (m.visible) c[j]++; }); return c; };
   return Object.fromEntries(meta.map((m) => [m.tag, m.tris]));
 }
 function sync(z) { const b = z.bones;
   b.hips.position.y = z.hipY + (z.pelvis.position.y - 0.95) / AVS; b.hips.rotation.set(z.pelvis.rotation.x, 0, z.pelvis.rotation.z);
-  b.chest.rotation.set(z.upper.rotation.x + 0.18, z.upper.rotation.y, z.upper.rotation.z); b.spine.rotation.x = 0.1; b.head.rotation.set(z.head.rotation.x + 0.15, 0.1, z.head.rotation.z + 0.22);
-  b.thighL.rotation.set(z.legL.rotation.x, 0, 0.03); b.thighR.rotation.set(z.legR.rotation.x, 0, -0.03); b.shinL.rotation.x = Math.max(0, -z.legL.rotation.x) * 0.9 + 0.08; b.shinR.rotation.x = Math.max(0, -z.legR.rotation.x) * 0.9 + 0.08;
-  b.upperArmL.rotation.set(z.armL.rotation.x, 0, z.armL.rotation.z); b.upperArmR.rotation.set(z.armR.rotation.x, 0, z.armR.rotation.z); b.foreArmL.rotation.x = -0.35; b.foreArmR.rotation.x = -0.25; b.handL.rotation.x = 0.4; b.handR.rotation.x = 0.5; }
+  b.chest.rotation.set(z.upper.rotation.x + 0.18 + (z.brute ? 0.1 : 0), z.upper.rotation.y, z.upper.rotation.z); b.spine.rotation.x = 0.1 + (z.brute ? 0.05 : 0); b.head.rotation.set(z.head.rotation.x + 0.15, 0.1 + (z.head.rotation.y || 0), z.head.rotation.z + 0.22);
+  b.thighL.rotation.set(z.legL.rotation.x, 0, 0.03); b.thighR.rotation.set(z.legR.rotation.x, 0, -0.03); b.shinL.rotation.x = Math.max(0, -z.legL.rotation.x) * 1.25 + 0.1; b.shinR.rotation.x = Math.max(0, -z.legR.rotation.x) * 1.25 + 0.1;
+  b.upperArmL.rotation.set(z.armL.rotation.x, 0, z.armL.rotation.z); b.upperArmR.rotation.set(z.armR.rotation.x, 0, z.armR.rotation.z);
+  const bend = (ax) => -0.4 - Math.max(0, -ax - 0.32) * 0.42;
+  b.foreArmL.rotation.x = bend(z.armL.rotation.x); b.foreArmR.rotation.x = bend(z.armR.rotation.x); b.handL.rotation.x = 0.22; b.handR.rotation.x = 0.28;
+  if (z.state === 'dying') { const k = Math.min(1, z.dieT / 0.55); b.foreArmL.rotation.x = -0.35 - k; b.foreArmR.rotation.x = -0.3 - k; } }
