@@ -19,6 +19,7 @@ body.lowq #fx-vignette{opacity:1}
 #roundBox .lbl{font-size:11px;letter-spacing:.32em;color:#a6b6bf;font-weight:700}
 #roundNum{font-size:54px;line-height:1;font-weight:900;color:#ff4a63;text-shadow:0 0 22px rgba(255,40,70,.6);font-variant-numeric:tabular-nums}
 #roundNum.pulse{animation:rpulse 1.2s ease-out}
+#roundBox.waiting{min-width:0;padding:10px 12px}#roundBox.waiting #roundNum{font-size:13px;letter-spacing:.16em;color:var(--acc);text-shadow:none}
 @keyframes rpulse{0%{transform:scale(2.2);opacity:0;filter:blur(6px)}30%{opacity:1;filter:none}100%{transform:scale(1)}}
 #topRight{right:16px;top:16px;display:flex;gap:10px;pointer-events:auto;z-index:8}
 .icon{width:42px;height:42px;border-radius:12px;border:1px solid var(--bd);background:var(--glass);backdrop-filter:blur(10px);color:#fff;font-size:15px;cursor:pointer}
@@ -178,6 +179,8 @@ body.nofs .fsbtn{display:none!important}
 .coop{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;margin-top:10px}.coop .k{font-size:11px;letter-spacing:.24em;color:#a6b6bf;font-weight:800}.coop em{color:var(--amb);font-style:normal}
 .coop input{background:rgba(0,0,0,.35);border:1px solid var(--bd);border-radius:10px;color:#fff;padding:9px 10px;font:700 14px var(--f);width:120px;-webkit-user-select:text;user-select:text}#coCode{width:84px;text-transform:uppercase;letter-spacing:.2em}
 .coMsg{min-height:16px;margin:4px 0 0;font-size:12px;color:var(--amb)}
+#lobby{z-index:24}#lobby h2{letter-spacing:.28em;margin:6px 0}#lobbyRoster{list-style:none;margin:8px auto;padding:0;max-width:320px;text-align:left}#lobbyRoster li{padding:4px 0;font-weight:700}#lobbyRoster .ok{color:var(--acc)}#lobbyRoster .wait{color:#9fb0ba}#lobby .primary{padding:12px 28px;letter-spacing:.18em}
+@media (max-height:520px){#lobby .panel{padding:10px 14px}#lobby .tag{font-size:12px;margin:4px auto}#lobby h2{font-size:28px}}
 #mpTag{left:50%;top:10px;transform:translateX(-50%);padding:4px 12px;font-size:11px;letter-spacing:.2em;font-weight:800;color:var(--acc)}
 @media (max-height:500px){.coop{margin-top:6px;gap:6px}.coop input{padding:6px 8px;width:100px}.coop button{padding:6px 10px}}
 #specTag{left:50%;bottom:22%;transform:translateX(-50%);padding:8px 16px;font-size:13px;letter-spacing:.22em;font-weight:800;color:var(--red)}

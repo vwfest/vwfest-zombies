@@ -111,7 +111,7 @@ function adapt(raw) {
 }
 
 /* ---------------- HUD helpers ---------------- */
-const hud = { hp: -1, pts: -1, mag: -1, res: -1, name: '', prompt: '', round: -1, alt: '' };
+const hud = { hp: -1, pts: -1, mag: -1, res: -1, name: '', prompt: '', round: -1, alt: '', lobby: false };
 let toastT = 0;
 function toast(t) { const e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => e.classList.remove('on'), 2600); }
 function banner(t, sub = '') { const e = $('banner'); e.innerHTML = t + (sub ? `<small>${sub}</small>` : ''); e.classList.remove('on'); void e.offsetWidth; e.classList.add('on'); }
@@ -124,7 +124,9 @@ function updateHUD() {
   if (s.mag !== hud.mag) { hud.mag = s.mag; $('ammoMag').textContent = s.mag; $('ammoMag').classList.toggle('empty', s.mag === 0); }
   if (s.reserve !== hud.res) { hud.res = s.reserve; $('ammoRes').textContent = '/ ' + s.reserve; }
   const o = P.slots[1 - P.cur]; const alt = o ? WEAPONS[o.id].name + '  ' + o.mag + '/' + o.reserve : ''; if (alt !== hud.alt) { hud.alt = alt; $('wAlt').textContent = alt; }
-  if (G.round !== hud.round) { hud.round = G.round; const e = $('roundNum'); e.textContent = G.round || 1; e.classList.remove('pulse'); void e.offsetWidth; e.classList.add('pulse'); }
+  const waiting = !!(MP?.on && G.mpPhase === 'lobby');
+  if (waiting !== hud.lobby) { hud.lobby = waiting; $('roundBox').classList.toggle('waiting', waiting); $('roundBox').querySelector('.lbl').textContent = waiting ? '' : 'ROUND'; if (waiting) $('roundNum').textContent = 'WAITING'; else hud.round = -1; }
+  if (!waiting && G.round !== hud.round) { hud.round = G.round; const e = $('roundNum'); e.textContent = G.round || 1; e.classList.remove('pulse'); void e.offsetWidth; e.classList.add('pulse'); }
   const rb = $('reloadBar'); if (P.reloadT > 0) { rb.classList.add('on'); rb.firstElementChild.style.width = (100 * (1 - P.reloadT / P.reloadTot)) + '%'; } else rb.classList.remove('on');
   // damage overlays
   const dm = clamp(P.dmg, 0, 1); $('fx-damage').style.opacity = tier === 0 ? Math.min(1, dm + (P.hp < P.maxHp * LOW_HP_FRAC ? 0.25 : 0)) : 0;
@@ -141,12 +143,13 @@ function giveWeapon(id) { // buy / crate: replace current if both slots used
   if (!P.slots[1]) { P.slots[1] = slotOf(id); P.cur = 1; } else P.slots[P.cur] = slotOf(id);
   P.reloadT = 0; P.switchT = 0.4; showGun();
 }
-function startReload() { const s = cur(), W = WEAPONS[s.id]; if (P.reloadT > 0 || P.switchT > 0 || s.mag >= W.mag || s.reserve <= 0) return; P.reloadTot = P.reloadT = W.perShell ? W.reload * (W.mag - s.mag) + 0.4 : W.reload; P.shellT = W.reload; if (MP?.on) MP.send({ t: 'reload', w: s.id }); sfx.reload(W.perShell ? 'pistol' : s.id); }
+function startReload() { if (MP?.on && G.mpPhase === 'lobby') return; const s = cur(), W = WEAPONS[s.id]; if (P.reloadT > 0 || P.switchT > 0 || s.mag >= W.mag || s.reserve <= 0) return; P.reloadTot = P.reloadT = W.perShell ? W.reload * (W.mag - s.mag) + 0.4 : W.reload; P.shellT = W.reload; if (MP?.on) MP.send({ t: 'reload', w: s.id }); sfx.reload(W.perShell ? 'pistol' : s.id); }
 function finishReload() { const s = cur(), W = WEAPONS[s.id]; if (MP?.on) { P.reloadT = 0; if (W.perShell) sfx.pump(); return; } const n = Math.min(W.mag - s.mag, s.reserve); s.mag += n; s.reserve -= n; P.reloadT = 0; if (W.perShell) sfx.pump(); }
 const _o = new THREE.Vector3(), _d = new THREE.Vector3(), _r = new THREE.Vector3(), _u = new THREE.Vector3(), _m = new THREE.Vector3(), _e = new THREE.Vector3(), _n = new THREE.Vector3();
 function aimDir(out) { const y = P.yaw + P.rY, p = P.pitch + P.rP; return out.set(-Math.sin(y) * Math.cos(p), Math.sin(p), -Math.cos(y) * Math.cos(p)); }
 function eyeY() { return 1.7 - (P.dead ? Math.min(1.1, P.deadT * 1.6) : 0) + Math.sin(P.bob * 2) * 0.035 * P.mv; }
 function shoot() {
+  if (MP?.on && G.mpPhase === 'lobby') return;
   const s = cur(), W = WEAPONS[s.id]; if (s.mag <= 0) { sfx.empty(); P.fireCd = 0.25; startReload(); return; }
   s.mag--; P.fireCd = 60 / W.rpm; P.kick = Math.min(1.6, P.kick + 1); P.heat = Math.min(1, P.heat + 0.12); sfx.shot(W.snd);
   aimDir(_d); _o.set(P.x, eyeY(), P.z); _r.set(Math.cos(P.yaw), 0, -Math.sin(P.yaw)); _u.crossVectors(_r, _d).normalize(); _r.crossVectors(_d, _u).normalize(); // _r: right, _u: up
@@ -342,12 +345,12 @@ function newGame() {
 function startGame() {
   sfx.init(); newGame(); lb.start(); G.state = 'playing'; showGun(); ['menu', 'over', 'pause'].forEach((i) => $(i).classList.add('hidden')); $('hud').classList.remove('hidden'); $('touch').classList.toggle('hidden', !isTouch);
   beam.visible = tier > 0 && P.flashlight; adaptGrace = 3; fpsAcc = 0; fpsN = 0;
-  if (!isTouch && !qs.has('test')) { try { const r = canvas.requestPointerLock?.(); r?.catch?.(() => {}); } catch (e) {} } else if (isTouch) goFull();
+  if (!isTouch && !qs.has('test') && G.mpPhase !== 'lobby') { try { const r = canvas.requestPointerLock?.(); r?.catch?.(() => {}); } catch (e) {} } else if (isTouch && G.mpPhase !== 'lobby') goFull();
   toast(isTouch ? 'Hold E at windows to repair · Open the gate for new guns' : 'Hold E at windows to repair · Open the gate for new guns');
 }
 function pause() { if (G.state !== 'playing' || P.dead) return; G.state = 'paused'; $('pause').classList.remove('hidden'); input.fire = false; input.f = input.s = 0; if (document.pointerLockElement) document.exitPointerLock?.(); setPrompt(''); }
 function resume() { if (G.state !== 'paused') return; G.state = 'playing'; $('pause').classList.add('hidden'); sfx.init(); if (!isTouch && !qs.has('test')) { try { canvas.requestPointerLock?.()?.catch?.(() => {}); } catch (e) {} } }
-function toMenu() { if (MP?.on) { MP.stop(); $('mpTag').classList.add('hidden'); } G.state = 'menu'; ['pause', 'over'].forEach((i) => $(i).classList.add('hidden')); $('menu').classList.remove('hidden'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); renderScores($('scoreList'), loadScores()); refreshGlobal(); zombies.reset(); if (P.gun) P.gun.visible = false; setPrompt(''); P.dead = false; flashSprite.visible = false; }
+function toMenu() { if (MP?.on) { MP.stop(); $('mpTag').classList.add('hidden'); } G.mpPhase = ''; G.state = 'menu'; ['pause', 'over', 'lobby'].forEach((i) => $(i).classList.add('hidden')); $('menu').classList.remove('hidden'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); renderScores($('scoreList'), loadScores()); refreshGlobal(); zombies.reset(); if (P.gun) P.gun.visible = false; setPrompt(''); P.dead = false; flashSprite.visible = false; }
 function gameOver() {
   G.state = 'over'; const list = saveScore({ round: Math.max(1, G.round), kills: P.kills, pts: P.pts, t: Date.now() });
   $('oRound').textContent = Math.max(1, G.round); $('oKills').textContent = P.kills; $('oHeads').textContent = P.heads; $('oPts').textContent = P.pts.toLocaleString(); const s = Math.floor(G.runTime); $('oTime').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
@@ -406,7 +409,8 @@ const keys = {};
 function updateAxes() { input.f = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0); input.s = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0); input.sprint = !!(keys.ShiftLeft || keys.ShiftRight); }
 addEventListener('keydown', (e) => { if (e.target && e.target.tagName === 'INPUT') return;
   if (e.repeat) return; keys[e.code] = true; if (G.state === 'playing' && !P.dead) {
-    if (e.code === 'KeyR') input.reload = true; if (e.code === 'KeyE') { input.interact = true; input.interactEdge = true; } if (e.code === 'Digit1') switchTo(0); if (e.code === 'Digit2') switchTo(1); if (e.code === 'KeyQ') switchTo(1 - P.cur); if (e.code === 'KeyF') setFlash(!P.flashlight); if (e.code === 'KeyP') pause();
+    if (G.mpPhase === 'lobby') { /* code rooms stay in the lobby until the server starts the match */ }
+    else { if (e.code === 'KeyR') input.reload = true; if (e.code === 'KeyE') { input.interact = true; input.interactEdge = true; } if (e.code === 'Digit1') switchTo(0); if (e.code === 'Digit2') switchTo(1); if (e.code === 'KeyQ') switchTo(1 - P.cur); if (e.code === 'KeyF') setFlash(!P.flashlight); if (e.code === 'KeyP') pause(); }
   } else if (G.state === 'paused' && e.code === 'KeyP') resume();
   if (e.code === 'KeyM') toggleMute(); if (e.code === 'Enter' && (G.state === 'menu' || G.state === 'over')) startGame(); updateAxes();
 });
@@ -419,8 +423,8 @@ canvas.addEventListener('mousedown', (e) => { if (e.button === 0 && G.state === 
 addEventListener('mouseup', (e) => { if (e.button === 0) input.fire = false; });
 addEventListener('wheel', (e) => { if (G.state === 'playing' && Math.abs(e.deltaY) > 4) switchTo(1 - P.cur); }, { passive: true });
 addEventListener('contextmenu', (e) => e.preventDefault());
-document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement && G.state === 'playing' && !P.dead && !isTouch && !qs.has('test')) pause(); });
-document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement && G.state === 'playing' && !P.dead && !isTouch && !qs.has('test') && G.mpPhase !== 'lobby') pause(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && G.mpPhase !== 'lobby') pause(); });
 // touch
 if (isTouch) {
   let stickId = null, lookId = null, lx = 0, ly = 0; const st = $('stick'), kn = $('knob'); let sc = { x: 0, y: 0 };
@@ -470,7 +474,8 @@ function mpInteract(f, held, dt) { // co-op: ask the server; it checks distance 
 /* ---------------- co-op (beta, local server only for now) ---------------- */
 const MP_URL = qs.get('server') || 'wss://vwfest-zombies-coop.onrender.com';
 MP = createMP({ scene, zombies, P, G, cam, world,
-  onJoined: (m) => { startGame(); G.round = 0; $('mpTag').textContent = 'CO-OP · ROOM ' + m.room; $('mpTag').classList.remove('hidden'); toast('Co-op room ' + m.room + ' · share the code with friends'); },
+  onJoined: (m) => { G.mpPhase = m.phase || ''; startGame(); G.round = 0; $('mpTag').textContent = 'CO-OP · ROOM ' + m.room; $('mpTag').classList.remove('hidden'); if (m.phase === 'lobby') { $('lobbyCode').textContent = m.room; $('lobby').classList.remove('hidden'); $('toast').classList.remove('on'); clearTimeout(toastT); } else toast('Co-op room ' + m.room + ' · share the code with friends'); },
+  onLobby: (snap) => { const was = G.mpPhase; G.mpPhase = snap.phase; const waiting = snap.phase === 'lobby'; $('lobby').classList.toggle('hidden', !waiting); if (was === 'lobby' && !waiting && !isTouch && !qs.has('test')) { try { canvas.requestPointerLock?.()?.catch?.(() => {}); } catch (e) {} } if (!waiting) return; $('lobbyCode').textContent = snap.room || MP.S.room || '-----'; const me = snap.p.find((p) => p[0] === MP.S.id); $('lobbyReady').textContent = me && me[13] ? 'UNREADY' : 'READY'; $('lobbyRoster').innerHTML = snap.p.map((p) => { const st = !p[10] ? 'disconnected' : p[13] ? 'ready' : 'waiting'; const nm = String(p[1]).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); return `<li class="${p[13] ? 'ok' : 'wait'}">${nm}${p[0] === MP.S.id ? ' (you)' : ''} · ${st}</li>`; }).join(''); },
   onStatus: (s) => { toast(String(s)); const e = $('coMsg'); if (e) e.textContent = String(s); },
   onRound: (n) => { G.round = n; G.phase = 'round'; sfx.round(n); banner('ROUND ' + n, 'Co-op · hold the yard together'); },
   onHurt: (d) => { P.lastHit = G.time; P.dmg = Math.max(P.dmg, 0.65 + 0.35 * (1 - Math.max(0, P.hp) / P.maxHp)); P.shake = 1; sfx.hurt(); },
@@ -494,6 +499,8 @@ MP = createMP({ scene, zombies, P, G, cam, world,
   onOver: () => { setTimeout(() => { P.dead = true; gameOver(); MP.stop(); $('mpTag').classList.add('hidden'); }, 1500); },
   onQuit: () => toMenu() });
 const coName = () => ($('coName').value || 'Survivor').trim().slice(0, 16);
+$('lobbyReady').onclick = () => { const s = MP.S.snaps.at(-1), me = s && s.p.find((p) => p[0] === MP.S.id); MP.send({ t: 'ready', on: !(me && me[13]) }); };
+$('lobbyLeave').onclick = () => { $('lobby').classList.add('hidden'); toMenu(); };
 $('coQuick').onclick = () => MP.connect({ url: MP_URL, name: coName(), join: { map: MAP.id } });
 $('coCreate').onclick = () => MP.connect({ url: MP_URL, name: coName(), join: { create: true, map: MAP.id } });
 $('coJoin').onclick = () => { const c = $('coCode').value.trim().toUpperCase(); if (!/^[A-Z2-9]{5}$/.test(c)) { $('coMsg').textContent = 'Room codes are 5 letters/numbers'; return; } MP.connect({ url: MP_URL, name: coName(), join: { code: c } }); };

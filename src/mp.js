@@ -25,7 +25,7 @@ export function createMP(ctx) {
   function onMsg(m) {
     if (m.t === 'joined') { const first = !S.on; S.id = m.id; S.room = m.room; S.token = m.token; S.status = 'ok'; if (first) { S.on = true; S.over = false; ctx.onJoined?.(m); } else ctx.onStatus?.('Reconnected'); }
     else if (m.t === 'err') { ctx.onStatus?.({ 'no-room': 'No room with that code', 'room-full': 'That room is full', full: 'Server is full', rate: 'Too many messages' }[m.m] || m.m); if (!S.on) { S.ws?.close(); } }
-    else if (m.t === 's') { m.recv = performance.now(); S.snaps.push(m); if (S.snaps.length > 30) S.snaps.shift(); for (const e of m.ev || []) ctx.onEvent?.(e, e.p === S.id || e.by === S.id); if (m.over && !S.over) { S.over = true; ctx.onOver?.(m); } }
+    else if (m.t === 's') { m.recv = performance.now(); S.snaps.push(m); if (S.snaps.length > 30) S.snaps.shift(); for (const e of m.ev || []) ctx.onEvent?.(e, e.p === S.id || e.by === S.id); ctx.onLobby?.(m); if (m.over && !S.over) { S.over = true; ctx.onOver?.(m); } }
     else if (m.t === 'hits') ctx.onHits?.(m.h);
     else if (m.t === 'act') { S.lastAct = m; ctx.onAct?.(m); }
   }
