@@ -19,7 +19,7 @@ class Room {
   activeWins() { return this.wins.filter((w) => w.area === 'A' || this.door.open); }
   addPlayer(id, name) {
     if (this.players.size >= MAX_PLAYERS) return null; const s = this.map.spawn, k = this.players.size;
-    const p = { id, name: String(name || 'Survivor').replace(/[^A-Za-z0-9_\- .]/g, '').slice(0, 16) || 'Survivor', x: s.x + (k - 1.5) * 1.2, z: s.z, yaw: 0, pitch: 0, hp: PLAYER_HP, pts: START_PTS, kills: 0, heads: 0, dead: false, lastShot: {}, lastIn: 0, lastHit: -99, lastRepair: 0, lastMed: -99, connected: true, owned: new Set(['pistol']) };
+    const p = { id, name: String(name || 'Survivor').replace(/[^A-Za-z0-9_\- .]/g, '').slice(0, 16) || 'Survivor', x: s.x + (k - 1.5) * 1.2, z: s.z, yaw: 0, pitch: 0, hp: PLAYER_HP, pts: START_PTS, kills: 0, heads: 0, dead: false, lastShot: {}, lastIn: 0, lastHit: -99, lastRepair: 0, lastMed: -99, connected: true, owned: new Set(['pistol']), ammo: { pistol: packAmmo('pistol') }, reloading: null };
     this.world.resolve(p, PR); this.players.set(id, p); return p;
   }
   removePlayer(id) { this.players.delete(id); }
@@ -38,7 +38,7 @@ class Room {
   // ---- interactions (all distance-checked + paid server-side) ----
   buy(id, w) { const p = this.players.get(id); if (!p || p.dead) return { ok: false, why: 'dead' }; const st = this.map.buys.find((b) => b.id === w);
     if (!st) return { ok: false, why: 'station' }; if (!this.near(p, st.x, st.z, 2.2)) return { ok: false, why: 'far' };
-    const price = p.owned.has(w) ? Math.floor(st.price / 2) : st.price; if (p.pts < price) return { ok: false, why: 'pts' }; p.pts -= price; p.owned.add(w); this.events.push({ e: 'buy', p: id, w }); return { ok: true, w, refill: price < st.price }; }
+    const price = p.owned.has(w) ? Math.floor(st.price / 2) : st.price; if (p.pts < price) return { ok: false, why: 'pts' }; p.pts -= price; p.owned.add(w); p.ammo[w] = packAmmo(w); if (p.reloading && p.reloading.w === w) p.reloading = null; this.events.push({ e: 'buy', p: id, w }); return { ok: true, w, refill: price < st.price }; }
   openDoor(id) { const p = this.players.get(id); if (!p || p.dead || this.door.open) return { ok: false, why: 'state' }; if (!this.near(p, this.door.x, DOOR_Z + 1, 3.6)) return { ok: false, why: 'far' };
     if (p.pts < this.door.price) return { ok: false, why: 'pts' }; p.pts -= this.door.price; this.door.open = true; this.world.setDoorOpen(true); this.events.push({ e: 'door', p: id }); return { ok: true }; }
   repair(id, winId, now) { const p = this.players.get(id), w = this.wins.find((x) => x.id === winId); if (!p || p.dead || !w) return { ok: false, why: 'state' };
@@ -46,13 +46,15 @@ class Room {
     p.lastRepair = now; w.count++; this.gain(p, 10); this.events.push({ e: 'plank', w: w.id, n: w.count, by: id }); return { ok: true }; }
   useCrate(id) { const p = this.players.get(id), c = this.crate; if (!p || p.dead) return { ok: false, why: 'dead' }; if (!this.near(p, c.x, c.z, 2.4)) return { ok: false, why: 'far' };
     if (c.state === 'idle') { if (p.pts < c.price) return { ok: false, why: 'pts' }; p.pts -= c.price; const pool = CRATE_POOL.filter((w) => !p.owned.has(w)); c.weapon = (pool.length ? pool : CRATE_POOL)[(this.rng() * (pool.length || CRATE_POOL.length)) | 0]; c.state = 'roll'; c.t = 0; c.by = id; this.events.push({ e: 'crate', s: 'roll', by: id }); return { ok: true, s: 'roll' }; }
-    if (c.state === 'ready') { if (c.by !== id) return { ok: false, why: 'not-yours' }; p.owned.add(c.weapon); this.events.push({ e: 'crate', s: 'take', by: id, w: c.weapon }); const w = c.weapon; c.state = 'idle'; c.weapon = null; c.by = null; return { ok: true, s: 'take', w }; }
+    if (c.state === 'ready') { if (c.by !== id) return { ok: false, why: 'not-yours' }; p.owned.add(c.weapon); p.ammo[c.weapon] = packAmmo(c.weapon); this.events.push({ e: 'crate', s: 'take', by: id, w: c.weapon }); const w = c.weapon; c.state = 'idle'; c.weapon = null; c.by = null; return { ok: true, s: 'take', w }; }
     return { ok: false, why: 'busy' }; }
   // ---- shooting: weapon owned + off cooldown, origin = server position, walls block bullets ----
   shoot(id, m, now) {
     const p = this.players.get(id); if (!p || p.dead) return { ok: false, why: 'dead' }; const W = WEAPONS[m.w];
     if (!W || !p.owned.has(m.w)) return { ok: false, why: 'weapon' };
+    const ammo = p.ammo[m.w]; if (!ammo || ammo.mag <= 0) return { ok: false, why: 'empty' };
     const gap = 60000 / W.rpm * 0.8; if (now - (p.lastShot[m.w] ?? -1e15) < gap) return { ok: false, why: 'rate' }; p.lastShot[m.w] = now;
+    ammo.mag -= 1; if (p.reloading && p.reloading.w === m.w) p.reloading = null;
     if (!Array.isArray(m.dirs) || m.dirs.length < 1 || m.dirs.length > W.pellets) return { ok: false, why: 'dirs' };
     const o = { x: p.x, y: EYE, z: p.z }, hits = new Map(); let blocked = 0;
     for (const d0 of m.dirs) {
@@ -66,7 +68,15 @@ class Room {
       if (killed) { g = this.gain(p, e.head ? 100 : z.value); this.zombies.delete(z.id); p.kills++; if (e.head) p.heads++; this.events.push({ e: 'kill', z: z.id, by: id, head: e.head }); this.onKill(z, p); }
       else { g = this.gain(p, 10); this.events.push({ e: 'hit', z: z.id, by: id, head: e.head }); }
       res.push({ z: z.id, killed, head: e.head, gain: g }); }
-    return { ok: true, hits: res, blocked };
+    return { ok: true, hits: res, blocked, mag: ammo.mag, res: ammo.res };
+  }
+  // Magazine and reserve live only here. A shot message cannot supply either number.
+  reload(id, w) {
+    const p = this.players.get(id); if (!p || p.dead) return { ok: false, why: 'dead' }; const W = WEAPONS[w]; const ammo = p.ammo[w];
+    if (!W || !ammo || !p.owned.has(w)) return { ok: false, why: 'weapon' };
+    if (ammo.mag >= W.mag || ammo.res <= 0) return { ok: false, why: 'full' };
+    if (p.reloading) return { ok: false, why: 'busy' };
+    p.reloading = { w, t: W.reload, perShell: !!W.perShell }; return { ok: true, w };
   }
   onKill(z, p) { // drops: med kit for a hurt killer, otherwise rare power-ups
     if (p.hp <= PLAYER_HP * 0.5 && this.time - p.lastMed >= MED_CD && ![...this.ups.values()].some((u) => u.type === 'health')) { p.lastMed = this.time; return this.drop('health', z.x, z.z); }
@@ -76,7 +86,7 @@ class Room {
     if (u.type === 'health') p.hp = Math.min(PLAYER_HP, p.hp + PLAYER_HP * 0.5);
     else if (u.type === 'double') this.double = 30;
     else if (u.type === 'nuke') { const n = this.zombies.size; for (const z of this.zombies.values()) this.events.push({ e: 'kill', z: z.id, by: p.id, nuke: 1 }); this.zombies.clear(); p.kills += n; this.gain(p, 400); }
-    /* ammo: client refills its own mags (ammo counts are cosmetic; fire rate is enforced here) */ }
+    else if (u.type === 'ammo') { for (const id of p.owned) p.ammo[id] = packAmmo(id); if (p.reloading) p.reloading = null; } }
   ray(o, d, max) { let best = null;
     for (const z of this.zombies.values()) { const s = z.scale, y0 = z.climb || 0;
       const hc = { x: z.x - o.x, y: y0 + 1.66 * s - o.y, z: z.z - o.z }, hr = 0.3 * s, b = hc.x * d.x + hc.y * d.y + hc.z * d.z, c = hc.x * hc.x + hc.y * hc.y + hc.z * hc.z - hr * hr, disc = b * b - c;
@@ -94,6 +104,13 @@ class Room {
   nearest(z) { let best = null, bd = 1e9; for (const p of this.players.values()) { if (p.dead || !p.connected) continue; const d = Math.hypot(p.x - z.x, p.z - z.z); if (d < bd) { bd = d; best = p; } } return best ? { p: best, d: bd } : null; }
   step(dt) {
     if (this.over || this.size === 0) return; this.time += dt; if (this.double > 0) this.double -= dt;
+    for (const p of this.players.values()) {
+      const rel = p.reloading; if (!rel || p.dead) continue; rel.t -= dt; if (rel.t > 0) continue;
+      const W = WEAPONS[rel.w], ammo = p.ammo[rel.w];
+      if (!W || !ammo || ammo.res <= 0 || ammo.mag >= W.mag) { p.reloading = null; continue; }
+      if (W.perShell) { ammo.mag++; ammo.res--; p.reloading = ammo.mag < W.mag && ammo.res > 0 ? { w: rel.w, t: W.reload, perShell: true } : null; }
+      else { const n = Math.min(W.mag - ammo.mag, ammo.res); ammo.mag += n; ammo.res -= n; p.reloading = null; }
+    }
     if (this.phase === 'wait' || this.phase === 'inter') { this.interT -= dt; if (this.interT <= 0) this.startRound(this.round + 1); }
     else if (this.phase === 'round') { if (this.toSpawn > 0) { this.spawnT -= dt; if (this.spawnT <= 0 && this.zombies.size < this.cap) { this.spawn(); this.spawnT = Math.max(0.3, 2.0 - this.round * 0.13) / Math.max(1, this.size * 0.75); } }
       if (this.toSpawn <= 0 && this.zombies.size === 0) { this.phase = 'inter'; this.interT = 8; for (const p of this.players.values()) if (p.dead) { p.dead = false; p.hp = PLAYER_HP / 2; this.events.push({ e: 'revive', p: p.id }); } } }
@@ -122,8 +139,9 @@ class Room {
     return { t: 's', time: r(this.time), round: this.round, phase: this.phase, over: this.over, dbl: this.double > 0 ? 1 : 0, door: this.door.open ? 1 : 0,
       win: this.wins.map((w) => w.count), crate: [this.crate.state, this.crate.weapon, this.crate.by],
       up: [...this.ups.values()].map((u) => [u.id, u.type, r(u.x), r(u.z)]),
-      p: [...this.players.values()].map((p) => [p.id, p.name, r(p.x), r(p.z), r(p.yaw), r(p.pitch), Math.max(0, Math.round(p.hp)), p.pts, p.kills, p.dead ? 1 : 0, p.connected ? 1 : 0, [...p.owned]]),
+      p: [...this.players.values()].map((p) => [p.id, p.name, r(p.x), r(p.z), r(p.yaw), r(p.pitch), Math.max(0, Math.round(p.hp)), p.pts, p.kills, p.dead ? 1 : 0, p.connected ? 1 : 0, [...p.owned], Object.entries(p.ammo).map(([id, a]) => [id, a.mag, a.res])]),
       z: [...this.zombies.values()].map((z) => [z.id, r(z.x), r(z.z), r(z.yaw), z.state === 'chase' ? 3 : z.state === 'climb' ? 2 : z.state === 'breach' ? 1 : 0, r(z.climb || 0), z.brute ? 1 : 0, z.runner ? 1 : 0, z.atk, z.v]),
       ev: this.events.splice(0) }; }
 }
-module.exports = { Room, MAPS, WEAPONS, MAX_PLAYERS, PLAYER_HP, MAX_SPEED, roundCount, PLANKS };
+function packAmmo(id) { const W = WEAPONS[id]; return { mag: W.mag, res: W.reserve }; }
+module.exports = { Room, MAPS, WEAPONS, MAX_PLAYERS, PLAYER_HP, MAX_SPEED, roundCount, PLANKS, packAmmo };

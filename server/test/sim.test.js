@@ -45,4 +45,10 @@ test('nuke clears zombies and pays the picker; double doubles points; power-ups 
   r.drop('nuke', 0, 10.5); r.step(0.05); assert.equal(r.zombies.size, 0); assert.equal(p.pts, pts + 400);
   r.drop('double', 0, 10.2); r.step(0.05); assert.ok(r.double > 0); zAt(r, 0, 5); r.shoot('a', { w: 'pistol', dirs: [[0, -0.12, -1]] }, 5000); assert.equal(p.pts, pts + 420);
   r.drop('ammo', 20, 0); for (let i = 0; i < 600; i++) r.step(0.05); assert.equal(r.ups.size, 0); });
-test('snapshot carries planks, gate, crate, power-ups and is compact', () => { const r = new Room('A'); r.addPlayer('a'); r.addPlayer('b'); for (let i = 0; i < 400; i++) r.step(0.05); const s = r.snapshot(); assert.equal(s.win.length, r.wins.length); assert.ok('door' in s && Array.isArray(s.crate) && Array.isArray(s.up)); assert.ok(JSON.stringify(s).length < 5000); });
+test('snapshot carries planks, gate, crate, power-ups and is compact', () => { const r = new Room('A'); r.addPlayer('a'); r.addPlayer('b'); for (let i = 0; i < 400; i++) r.step(0.05); const s = r.snapshot(); assert.equal(s.win.length, r.wins.length); assert.ok('door' in s && Array.isArray(s.crate) && Array.isArray(s.up)); assert.ok(JSON.stringify(s).length < 8000); });
+test('magazine is server-owned: a claimed mag count cannot keep firing', () => { const r = new Room('A'); const p = r.addPlayer('a'); at(p, 0, 10); let t = 1000;
+  for (let i = 0; i < 12; i++) { const res = r.shoot('a', { w: 'pistol', mag: 999, dirs: [[0, 0, -1]] }, t); assert.equal(res.ok, true, i); t += 200; }
+  assert.equal(p.ammo.pistol.mag, 0); assert.equal(p.ammo.pistol.res, 60);
+  const empty = r.shoot('a', { w: 'pistol', mag: 999, dirs: [[0, 0, -1]] }, t + 200); assert.equal(empty.why, 'empty');
+  assert.equal(r.reload('a', 'pistol').ok, true); r.step(1.3); assert.equal(p.ammo.pistol.mag, 12); assert.equal(p.ammo.pistol.res, 48);
+  p.ammo.shotgun = { mag: 4, res: 2 }; p.owned.add('shotgun'); assert.ok(r.reload('a', 'shotgun').ok); r.step(0.5); assert.equal(p.ammo.shotgun.mag, 5); r.step(0.5); assert.equal(p.ammo.shotgun.mag, 6); assert.equal(p.ammo.shotgun.res, 0); assert.equal(p.reloading, null); });

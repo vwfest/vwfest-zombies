@@ -5,7 +5,13 @@ const http = require('http'), crypto = require('crypto'), { WebSocketServer } = 
 const DEV = process.env.DEV_HOOKS === '1' && process.env.NODE_ENV !== 'production';
 const PORT = +process.env.PORT || 8787, TICK = 1 / 20, SNAP_EVERY = 1, GRACE_MS = 30000;
 const PROD = process.env.NODE_ENV === 'production', HOST = process.env.HOST || (PROD ? '0.0.0.0' : '127.0.0.1'), TRUST_PROXY = process.env.TRUST_PROXY === '1';
-const ORIGINS = (process.env.ALLOWED_ORIGINS || (PROD ? 'https://vwfest.github.io' : 'https://vwfest.github.io,http://localhost:8099,http://127.0.0.1:8099')).split(',').map((s) => s.trim()).filter(Boolean);
+const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+function allowedOrigins(env = process.env) {
+  const prod = env.NODE_ENV === 'production';
+  const raw = env.ALLOWED_ORIGINS || (prod ? 'https://vwfest.github.io' : 'https://vwfest.github.io,http://localhost:8099,http://127.0.0.1:8099');
+  return raw.split(',').map((s) => s.trim()).filter((s) => s && !(prod && LOCAL_ORIGIN.test(s)));
+}
+const ORIGINS = allowedOrigins();
 const LIMITS = { msgPerSec: 45, maxPayload: 1024, joinPerMin: 10, maxRooms: 200, connPerIp: 6 };
 function createServer(opts = {}) {
   const origins = opts.origins || ORIGINS, rooms = new Map(), sessions = new Map(), perIp = new Map(); // token -> {room, pid, ws, goneAt}
@@ -35,7 +41,8 @@ function createServer(opts = {}) {
       }
       if (!sess) return; const r = rooms.get(sess.room); if (!r) return;
       if (m.t === 'in') r.input(sess.pid, m, now);
-      else if (m.t === 'shot') { const res = r.shoot(sess.pid, m, now); if (res.ok && res.hits.length) send(ws, { t: 'hits', h: res.hits }); }
+      else if (m.t === 'shot') { const res = r.shoot(sess.pid, m, now); if (res.ok && res.hits.length) send(ws, { t: 'hits', h: res.hits }); else if (!res.ok) send(ws, { t: 'act', a: 'shot', ...res }); }
+      else if (m.t === 'reload') { const res = r.reload(sess.pid, String(m.w || '')); if (!res.ok && res.why !== 'full' && res.why !== 'busy') send(ws, { t: 'act', a: 'reload', ...res }); }
       else if (m.t === 'buy') send(ws, { t: 'act', a: 'buy', ...r.buy(sess.pid, String(m.w)) });
       else if (m.t === 'door') send(ws, { t: 'act', a: 'door', ...r.openDoor(sess.pid) });
       else if (m.t === 'repair') { const res = r.repair(sess.pid, String(m.w), now); if (!res.ok && res.why !== 'rate') send(ws, { t: 'act', a: 'repair', ...res }); }
@@ -52,5 +59,5 @@ function createServer(opts = {}) {
       for (const s of sessions.values()) if (s.room === c && s.ws && s.ws.readyState === 1) s.ws.send(snap); } }, TICK * 1000);
   return { srv, wss, rooms, sessions, close: () => { clearInterval(loop); wss.clients.forEach((c) => c.terminate()); srv.close(); }, listen: (p = PORT) => new Promise((res) => srv.listen(p, HOST, () => res(srv.address().port))) };
 }
-module.exports = { createServer, LIMITS };
-if (require.main === module) createServer().listen().then((p) => console.log('DUST & DEAD co-op server (dev) on ws://127.0.0.1:' + p, 'origins:', ORIGINS.join(' ')));
+module.exports = { createServer, LIMITS, allowedOrigins };
+if (require.main === module) createServer().listen().then((p) => console.log('DUST & DEAD co-op on ' + (PROD ? 'wss' : 'ws') + '://' + HOST + ':' + p, 'origins:', ORIGINS.join(' ') || '(none)'));
