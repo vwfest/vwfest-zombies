@@ -16,6 +16,9 @@ Point a client at another server with `?server=wss://host` or `localStorage.vwz_
 
 **Netcode:** 20 Hz server tick and snapshots. Clients render other players and zombies 100 ms in the past with interpolation, and predict their own movement with server correction past 2.5 m. On reconnect a token keeps your player for 30 s.
 
+## Code-room ready lobby
+Creating a room (`create`) waits in `phase: lobby`. The server starts the match once, only when every connected player is ready and at least two are connected. Shots, reloads, buys, the gate, repairs and the crate are rejected with `why: 'lobby'`, and the sim does not spawn or damage anyone while waiting. Leaving is always available. A disconnect removes that player from the ready count; reconnecting during the lobby clears ready. Joining after the match has left the lobby drops you into the running game and does not send the room back. Quick match is unchanged: it stays on `phase: wait` and starts immediately. The client shows the room code, roster and each ready state, but the server decides the start.
+
 ## Shared world (implemented)
 Server map AABBs from all three client maps are in `server/maps.json`. Movement is swept against walls/fences and resolved with player radius; bullet rays stop at bullet colliders. Zombies respect solid colliders and the closed gate; once open, the gate routes them between lots.
 

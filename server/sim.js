@@ -19,10 +19,19 @@ class Room {
   activeWins() { return this.wins.filter((w) => w.area === 'A' || this.door.open); }
   addPlayer(id, name) {
     if (this.players.size >= MAX_PLAYERS) return null; const s = this.map.spawn, k = this.players.size;
-    const p = { id, name: String(name || 'Survivor').replace(/[^A-Za-z0-9_\- .]/g, '').slice(0, 16) || 'Survivor', x: s.x + (k - 1.5) * 1.2, z: s.z, yaw: 0, pitch: 0, hp: PLAYER_HP, pts: START_PTS, kills: 0, heads: 0, dead: false, lastShot: {}, lastIn: 0, lastHit: -99, lastRepair: 0, lastMed: -99, connected: true, owned: new Set(['pistol']), ammo: { pistol: packAmmo('pistol') }, reloading: null };
+    const p = { id, name: String(name || 'Survivor').replace(/[^A-Za-z0-9_\- .]/g, '').slice(0, 16) || 'Survivor', x: s.x + (k - 1.5) * 1.2, z: s.z, yaw: 0, pitch: 0, hp: PLAYER_HP, pts: START_PTS, kills: 0, heads: 0, dead: false, lastShot: {}, lastIn: 0, lastHit: -99, lastRepair: 0, lastMed: -99, connected: true, ready: false, owned: new Set(['pistol']), ammo: { pistol: packAmmo('pistol') }, reloading: null };
     this.world.resolve(p, PR); this.players.set(id, p); return p;
   }
   removePlayer(id) { this.players.delete(id); }
+  // Code rooms wait in the lobby. A reconnect there must ready again; an in-progress match does not return to the lobby.
+  onReconnect(id) { const p = this.players.get(id); if (!p) return; p.connected = true; if (this.phase === 'lobby') p.ready = false; }
+  setReady(id, on) { const p = this.players.get(id); if (!p || this.phase !== 'lobby') return { ok: false, why: 'state' }; p.ready = !!on; return { ok: true, ready: p.ready }; }
+  maybeStart() {
+    if (this.started || this.phase !== 'lobby') return false;
+    const live = [...this.players.values()].filter((p) => p.connected);
+    if (live.length < (this.minStart || 2) || !live.every((p) => p.ready)) return false;
+    this.started = true; this.phase = 'wait'; this.interT = 3; this.events.push({ e: 'start' }); return true;
+  }
   near(p, x, z, r) { return Math.hypot(p.x - x, p.z - z) <= r; }
   // movement: speed-capped, cannot pass through walls (segment test), then pushed out of colliders
   input(id, m, now) {
@@ -36,21 +45,21 @@ class Room {
   }
   gain(p, n) { const g = n * (this.double > 0 ? 2 : 1); p.pts += g; return g; }
   // ---- interactions (all distance-checked + paid server-side) ----
-  buy(id, w) { const p = this.players.get(id); if (!p || p.dead) return { ok: false, why: 'dead' }; const st = this.map.buys.find((b) => b.id === w);
+  buy(id, w) { const p = this.players.get(id); if (!p || p.dead) return { ok: false, why: 'dead' }; if (this.phase === 'lobby') return { ok: false, why: 'lobby' }; const st = this.map.buys.find((b) => b.id === w);
     if (!st) return { ok: false, why: 'station' }; if (!this.near(p, st.x, st.z, 2.2)) return { ok: false, why: 'far' };
     const price = p.owned.has(w) ? Math.floor(st.price / 2) : st.price; if (p.pts < price) return { ok: false, why: 'pts' }; p.pts -= price; p.owned.add(w); p.ammo[w] = packAmmo(w); if (p.reloading && p.reloading.w === w) p.reloading = null; this.events.push({ e: 'buy', p: id, w }); return { ok: true, w, refill: price < st.price }; }
-  openDoor(id) { const p = this.players.get(id); if (!p || p.dead || this.door.open) return { ok: false, why: 'state' }; if (!this.near(p, this.door.x, DOOR_Z + 1, 3.6)) return { ok: false, why: 'far' };
+  openDoor(id) { const p = this.players.get(id); if (!p || p.dead || this.door.open) return { ok: false, why: 'state' }; if (this.phase === 'lobby') return { ok: false, why: 'lobby' }; if (!this.near(p, this.door.x, DOOR_Z + 1, 3.6)) return { ok: false, why: 'far' };
     if (p.pts < this.door.price) return { ok: false, why: 'pts' }; p.pts -= this.door.price; this.door.open = true; this.world.setDoorOpen(true); this.events.push({ e: 'door', p: id }); return { ok: true }; }
-  repair(id, winId, now) { const p = this.players.get(id), w = this.wins.find((x) => x.id === winId); if (!p || p.dead || !w) return { ok: false, why: 'state' };
+  repair(id, winId, now) { const p = this.players.get(id), w = this.wins.find((x) => x.id === winId); if (!p || p.dead || !w) return { ok: false, why: 'state' }; if (this.phase === 'lobby') return { ok: false, why: 'lobby' };
     if (!this.near(p, w.in.x, w.in.z, 2.3)) return { ok: false, why: 'far' }; if (now - p.lastRepair < REPAIR_GAP) return { ok: false, why: 'rate' }; if (w.count >= PLANKS) return { ok: false, why: 'full' };
     p.lastRepair = now; w.count++; this.gain(p, 10); this.events.push({ e: 'plank', w: w.id, n: w.count, by: id }); return { ok: true }; }
-  useCrate(id) { const p = this.players.get(id), c = this.crate; if (!p || p.dead) return { ok: false, why: 'dead' }; if (!this.near(p, c.x, c.z, 2.4)) return { ok: false, why: 'far' };
+  useCrate(id) { const p = this.players.get(id), c = this.crate; if (!p || p.dead) return { ok: false, why: 'dead' }; if (this.phase === 'lobby') return { ok: false, why: 'lobby' }; if (!this.near(p, c.x, c.z, 2.4)) return { ok: false, why: 'far' };
     if (c.state === 'idle') { if (p.pts < c.price) return { ok: false, why: 'pts' }; p.pts -= c.price; const pool = CRATE_POOL.filter((w) => !p.owned.has(w)); c.weapon = (pool.length ? pool : CRATE_POOL)[(this.rng() * (pool.length || CRATE_POOL.length)) | 0]; c.state = 'roll'; c.t = 0; c.by = id; this.events.push({ e: 'crate', s: 'roll', by: id }); return { ok: true, s: 'roll' }; }
     if (c.state === 'ready') { if (c.by !== id) return { ok: false, why: 'not-yours' }; p.owned.add(c.weapon); p.ammo[c.weapon] = packAmmo(c.weapon); this.events.push({ e: 'crate', s: 'take', by: id, w: c.weapon }); const w = c.weapon; c.state = 'idle'; c.weapon = null; c.by = null; return { ok: true, s: 'take', w }; }
     return { ok: false, why: 'busy' }; }
   // ---- shooting: weapon owned + off cooldown, origin = server position, walls block bullets ----
   shoot(id, m, now) {
-    const p = this.players.get(id); if (!p || p.dead) return { ok: false, why: 'dead' }; const W = WEAPONS[m.w];
+    const p = this.players.get(id); if (!p || p.dead) return { ok: false, why: 'dead' }; if (this.phase === 'lobby') return { ok: false, why: 'lobby' }; const W = WEAPONS[m.w];
     if (!W || !p.owned.has(m.w)) return { ok: false, why: 'weapon' };
     const ammo = p.ammo[m.w]; if (!ammo || ammo.mag <= 0) return { ok: false, why: 'empty' };
     const gap = 60000 / W.rpm * 0.8; if (now - (p.lastShot[m.w] ?? -1e15) < gap) return { ok: false, why: 'rate' }; p.lastShot[m.w] = now;
@@ -72,7 +81,7 @@ class Room {
   }
   // Magazine and reserve live only here. A shot message cannot supply either number.
   reload(id, w) {
-    const p = this.players.get(id); if (!p || p.dead) return { ok: false, why: 'dead' }; const W = WEAPONS[w]; const ammo = p.ammo[w];
+    const p = this.players.get(id); if (!p || p.dead) return { ok: false, why: 'dead' }; if (this.phase === 'lobby') return { ok: false, why: 'lobby' }; const W = WEAPONS[w]; const ammo = p.ammo[w];
     if (!W || !ammo || !p.owned.has(w)) return { ok: false, why: 'weapon' };
     if (ammo.mag >= W.mag || ammo.res <= 0) return { ok: false, why: 'full' };
     if (p.reloading) return { ok: false, why: 'busy' };
@@ -103,7 +112,9 @@ class Room {
     this.zombies.set(z.id, z); this.toSpawn--; return z; }
   nearest(z) { let best = null, bd = 1e9; for (const p of this.players.values()) { if (p.dead || !p.connected) continue; const d = Math.hypot(p.x - z.x, p.z - z.z); if (d < bd) { bd = d; best = p; } } return best ? { p: best, d: bd } : null; }
   step(dt) {
-    if (this.over || this.size === 0) return; this.time += dt; if (this.double > 0) this.double -= dt;
+    if (this.over || this.size === 0) return;
+    if (this.phase === 'lobby') { this.maybeStart(); return; }
+    this.time += dt; if (this.double > 0) this.double -= dt;
     for (const p of this.players.values()) {
       const rel = p.reloading; if (!rel || p.dead) continue; rel.t -= dt; if (rel.t > 0) continue;
       const W = WEAPONS[rel.w], ammo = p.ammo[rel.w];
@@ -139,7 +150,7 @@ class Room {
     return { t: 's', time: r(this.time), round: this.round, phase: this.phase, over: this.over, dbl: this.double > 0 ? 1 : 0, door: this.door.open ? 1 : 0,
       win: this.wins.map((w) => w.count), crate: [this.crate.state, this.crate.weapon, this.crate.by],
       up: [...this.ups.values()].map((u) => [u.id, u.type, r(u.x), r(u.z)]),
-      p: [...this.players.values()].map((p) => [p.id, p.name, r(p.x), r(p.z), r(p.yaw), r(p.pitch), Math.max(0, Math.round(p.hp)), p.pts, p.kills, p.dead ? 1 : 0, p.connected ? 1 : 0, [...p.owned], Object.entries(p.ammo).map(([id, a]) => [id, a.mag, a.res])]),
+      p: [...this.players.values()].map((p) => [p.id, p.name, r(p.x), r(p.z), r(p.yaw), r(p.pitch), Math.max(0, Math.round(p.hp)), p.pts, p.kills, p.dead ? 1 : 0, p.connected ? 1 : 0, [...p.owned], Object.entries(p.ammo).map(([id, a]) => [id, a.mag, a.res]), p.ready ? 1 : 0]),
       z: [...this.zombies.values()].map((z) => [z.id, r(z.x), r(z.z), r(z.yaw), z.state === 'chase' ? 3 : z.state === 'climb' ? 2 : z.state === 'breach' ? 1 : 0, r(z.climb || 0), z.brute ? 1 : 0, z.runner ? 1 : 0, z.atk, z.v]),
       ev: this.events.splice(0) }; }
 }

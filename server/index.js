@@ -30,17 +30,18 @@ function createServer(opts = {}) {
       if (bin) return ws.close(4003, 'binary'); let m; try { m = JSON.parse(buf.toString()); } catch (e) { return ws.close(4003, 'json'); } if (!m || typeof m.t !== 'string') return;
       if (m.t === 'join') { if (sess || ++joins > LIMITS.joinPerMin) return;
         // reconnect
-        if (typeof m.token === 'string' && sessions.has(m.token)) { const s = sessions.get(m.token), r = rooms.get(s.room); if (r && r.players.has(s.pid)) { if (s.ws && s.ws !== ws) s.ws.close(4001, 'replaced'); s.ws = ws; s.goneAt = 0; r.players.get(s.pid).connected = true; sess = s; return send(ws, { t: 'joined', room: r.code, id: s.pid, token: m.token, map: r.mapId, re: true }); } }
+        if (typeof m.token === 'string' && sessions.has(m.token)) { const s = sessions.get(m.token), r = rooms.get(s.room); if (r && r.players.has(s.pid)) { if (s.ws && s.ws !== ws) s.ws.close(4001, 'replaced'); s.ws = ws; s.goneAt = 0; r.onReconnect(s.pid); sess = s; return send(ws, { t: 'joined', room: r.code, id: s.pid, token: m.token, map: r.mapId, re: true, phase: r.phase }); } }
         let r = null; const want = typeof m.code === 'string' ? m.code.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5) : '';
-        if (m.create) { if (rooms.size >= LIMITS.maxRooms) return send(ws, { t: 'err', m: 'full' }); r = new Room(code(), String(m.map || '')); rooms.set(r.code, r); }
+        if (m.create) { if (rooms.size >= LIMITS.maxRooms) return send(ws, { t: 'err', m: 'full' }); r = new Room(code(), String(m.map || '')); r.phase = 'lobby'; r.minStart = 2; rooms.set(r.code, r); }
         else if (want) { r = rooms.get(want); if (!r) return send(ws, { t: 'err', m: 'no-room' }); }
         else { r = [...rooms.values()].find((x) => x.quick && !x.over && x.size < MAX_PLAYERS); if (!r) { if (rooms.size >= LIMITS.maxRooms) return send(ws, { t: 'err', m: 'full' }); r = new Room(code(), String(m.map || '')); r.quick = true; rooms.set(r.code, r); } }
         if (r.size >= MAX_PLAYERS || r.over) return send(ws, { t: 'err', m: 'room-full' });
         const pid = crypto.randomBytes(4).toString('hex'), token = crypto.randomBytes(18).toString('base64url'); r.addPlayer(pid, m.name);
-        sess = { room: r.code, pid, ws, goneAt: 0, token }; sessions.set(token, sess); return send(ws, { t: 'joined', room: r.code, id: pid, token, map: r.mapId });
+        sess = { room: r.code, pid, ws, goneAt: 0, token }; sessions.set(token, sess); return send(ws, { t: 'joined', room: r.code, id: pid, token, map: r.mapId, phase: r.phase });
       }
       if (!sess) return; const r = rooms.get(sess.room); if (!r) return;
       if (m.t === 'in') r.input(sess.pid, m, now);
+      else if (m.t === 'ready') r.setReady(sess.pid, m.on === true || m.on === 1);
       else if (m.t === 'shot') { const res = r.shoot(sess.pid, m, now); if (res.ok && res.hits.length) send(ws, { t: 'hits', h: res.hits }); else if (!res.ok) send(ws, { t: 'act', a: 'shot', ...res }); }
       else if (m.t === 'reload') { const res = r.reload(sess.pid, String(m.w || '')); if (!res.ok && res.why !== 'full' && res.why !== 'busy') send(ws, { t: 'act', a: 'reload', ...res }); }
       else if (m.t === 'buy') send(ws, { t: 'act', a: 'buy', ...r.buy(sess.pid, String(m.w)) });
