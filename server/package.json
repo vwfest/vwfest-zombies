@@ -1,0 +1,4 @@
+{ "name": "vwfest-zombies-server", "private": true, "version": "0.1.0", "type": "commonjs",
+  "description": "DUST & DEAD co-op server (local/dev only, not deployed)",
+  "scripts": { "start": "node index.js", "test": "node --test test/*.test.js" },
+  "dependencies": { "ws": "^8.18.0" } }

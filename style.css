@@ -173,3 +173,10 @@ body.nofs .fsbtn{display:none!important}
   body.touch #bLamp{right:calc(env(safe-area-inset-right) + 164px);bottom:calc(env(safe-area-inset-bottom) + 140px)}
   body.touch #toast{top:70px}body.touch #prompt{bottom:30%}
 }
+
+/* co-op */
+.coop{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;margin-top:10px}.coop .k{font-size:11px;letter-spacing:.24em;color:#a6b6bf;font-weight:800}.coop em{color:var(--amb);font-style:normal}
+.coop input{background:rgba(0,0,0,.35);border:1px solid var(--bd);border-radius:10px;color:#fff;padding:9px 10px;font:700 14px var(--f);width:120px;-webkit-user-select:text;user-select:text}#coCode{width:84px;text-transform:uppercase;letter-spacing:.2em}
+.coMsg{min-height:16px;margin:4px 0 0;font-size:12px;color:var(--amb)}
+#mpTag{left:50%;top:10px;transform:translateX(-50%);padding:4px 12px;font-size:11px;letter-spacing:.2em;font-weight:800;color:var(--acc)}
+@media (max-height:500px){.coop{margin-top:6px;gap:6px}.coop input{padding:6px 8px;width:100px}.coop button{padding:6px 10px}}
