@@ -52,3 +52,32 @@ test('magazine is server-owned: a claimed mag count cannot keep firing', () => {
   const empty = r.shoot('a', { w: 'pistol', mag: 999, dirs: [[0, 0, -1]] }, t + 200); assert.equal(empty.why, 'empty');
   assert.equal(r.reload('a', 'pistol').ok, true); r.step(1.3); assert.equal(p.ammo.pistol.mag, 12); assert.equal(p.ammo.pistol.res, 48);
   p.ammo.shotgun = { mag: 4, res: 2 }; p.owned.add('shotgun'); assert.ok(r.reload('a', 'shotgun').ok); r.step(0.5); assert.equal(p.ammo.shotgun.mag, 5); r.step(0.5); assert.equal(p.ammo.shotgun.mag, 6); assert.equal(p.ammo.shotgun.res, 0); assert.equal(p.reloading, null); });
+function lobbyRoom() { const r = new Room('CODE1'); r.phase = 'lobby'; r.minStart = 2; return r; }
+const starts = (r) => r.snapshot().ev.filter((e) => e.e === 'start').length;
+test('code lobby waits: no waves, no damage, combat rejected, one ready player cannot start', () => {
+  const r = lobbyRoom(); const p = r.addPlayer('a', 'Ada'); const mag = p.ammo.pistol.mag;
+  r.setReady('a', true); for (let i = 0; i < 80; i++) r.step(0.05);
+  assert.equal(r.phase, 'lobby'); assert.equal(r.round, 0); assert.equal(r.zombies.size, 0); assert.equal(r.time, 0); assert.equal(starts(r), 0);
+  assert.equal(r.shoot('a', { w: 'pistol', dirs: [[0, 0, -1]] }, 1000).why, 'lobby'); assert.equal(p.ammo.pistol.mag, mag);
+  assert.equal(r.reload('a', 'pistol').why, 'lobby'); assert.equal(r.buy('a', 'smg').why, 'lobby'); assert.equal(r.openDoor('a').why, 'lobby'); assert.equal(r.useCrate('a').why, 'lobby'); assert.equal(r.repair('a', r.wins[0].id, 1000).why, 'lobby');
+  assert.equal(p.hp, PLAYER_HP);
+});
+test('lobby does not start until every connected player is ready, and starts once', () => {
+  const r = lobbyRoom(); const a = r.addPlayer('a', 'Ada'), b = r.addPlayer('b', 'Bea');
+  r.setReady('a', true); for (let i = 0; i < 40; i++) r.step(0.05); assert.equal(r.phase, 'lobby'); assert.equal(starts(r), 0);
+  r.setReady('b', true); r.setReady('b', false); r.step(0.05); assert.equal(r.phase, 'lobby');
+  r.setReady('b', true); assert.equal(r.step(0.05), undefined); assert.equal(r.phase, 'wait'); assert.equal(r.started, true); assert.equal(starts(r), 1);
+  r.setReady('a', false); for (let i = 0; i < 160; i++) r.step(0.05); assert.equal(r.round, 1); assert.ok(r.zombies.size > 0); assert.equal(starts(r), 0);
+  assert.equal(a.ready, true); assert.equal(b.ready, true);
+});
+test('lobby roster changes cannot bypass ready or deadlock a pair', () => {
+  const blocked = lobbyRoom(); const u = blocked.addPlayer('u'); blocked.addPlayer('a'); blocked.addPlayer('b');
+  blocked.setReady('a', true); blocked.setReady('b', true); blocked.step(0.05); assert.equal(blocked.phase, 'lobby');
+  u.connected = false; blocked.step(0.05); assert.equal(blocked.phase, 'wait'); assert.equal(starts(blocked), 1);
+  const r = lobbyRoom(); const a = r.addPlayer('a'), b = r.addPlayer('b');
+  r.setReady('a', true); r.setReady('b', true); r.removePlayer('b'); r.step(0.05); assert.equal(r.phase, 'lobby'); assert.equal(starts(r), 0);
+  r.addPlayer('b2'); r.onReconnect('a'); assert.equal(a.ready, false); r.setReady('a', true); r.step(0.05); assert.equal(r.phase, 'lobby');
+  r.setReady('b2', true); r.step(0.05); assert.equal(r.phase, 'wait'); assert.equal(starts(r), 1);
+  const late = r.addPlayer('d', 'Dee'); assert.equal(late.ready, false); r.setReady('d', true); assert.equal(late.ready, false); assert.equal(r.phase, 'wait');
+  const snap = r.snapshot(); assert.equal(snap.p.find((p) => p[0] === 'a')[13], 1); assert.equal(snap.p.find((p) => p[0] === 'd')[13], 0); assert.equal(b.ready, true);
+});
