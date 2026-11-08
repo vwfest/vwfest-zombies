@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Mats, makeBeetle, makeBus, makeBeetleLo, makeBusLo, makeTireStack, makeDrum, makeCrate, makePole, makeCactus, makeRock, randPaint } from './props.js';
+import { setYardCars } from './hd/cars.js';
 import { buildViewmodel, WEAPONS } from './weapons.js';
 import { rnd, pick, clamp, TAU } from './util.js';
 
@@ -22,6 +23,20 @@ export class World {
     this.staticGroup = new THREE.Group(); this.root = new THREE.Group(); scene.add(this.root);
     this.build();
     this.batch();
+    this.dress(tier);
+  }
+  // Medium/High only: dirt, galvanized fence and car paint stop sharing one flat response, and the existing lamps fall off sooner. Low keeps the previous numbers.
+  dress(tier = this.tier) {
+    const hi = tier > 0, M = this.M;
+    M.sand.color.setHex(hi ? 0xa89078 : 0xcfc2b0); M.sand.bumpScale = hi ? 5.5 : 3; M.sand.roughness = hi ? 0.96 : 0.97;
+    M.concrete.color.setHex(hi ? 0xc8baa8 : 0xffffff); M.concrete.bumpScale = hi ? 2.8 : 1.5; M.concrete.roughness = hi ? 0.96 : 0.88; M.concrete.metalness = hi ? 0 : 0.02;
+    M.fence.roughness = hi ? 0.42 : 1; M.fence.metalness = hi ? 0.84 : 0.75; M.fence.bumpScale = hi ? 4.2 : 2.5;
+    M.fenceDark.roughness = hi ? 0.6 : 1; M.fenceDark.metalness = hi ? 0.55 : 0.7;
+    for (const m of Object.values(M.cache)) if (m.userData.paint) { m.roughness = hi ? 0.4 : 1; m.metalness = hi ? 0.25 : 0.55; }
+    this.lampReach = hi ? 18 : 30; this.lampDecay = hi ? 2 : 1.7; this.lampBase = hi ? 90 : 95;
+    if (this.moon) this.moon.intensity = hi ? 1.4 : 1.7;
+    if (this.lampPool) for (const l of this.lampPool) { l.distance = this.lampReach; l.decay = this.lampDecay; }
+    setYardCars(tier);
   }
   // ---- collider helpers ----
   addCol(x0, x1, z0, z1, y1 = 3, o = {}) { const c = { x0, x1, z0, z1, y0: o.y0 || 0, y1, ...o }; this.colliders.push(c); return c; }
@@ -219,7 +234,7 @@ export class World {
     }
   }
   setTier(tier) {
-    this.tier = tier; const n = [3, 5, 7][tier];
+    this.tier = tier; this.dress(tier); const n = [3, 5, 7][tier];
     this.lampPool.forEach((l, i) => (l.visible = i < n)); this.cones.forEach((c) => (c.visible = tier > 0)); this.moon.castShadow = tier > 0;
     const ms = tier === 2 ? 2048 : 1024; if (this.moon.shadow.mapSize.x !== ms) { this.moon.shadow.mapSize.set(ms, ms); this.moon.shadow.map?.dispose(); this.moon.shadow.map = null; }
   }
@@ -263,7 +278,7 @@ export class World {
     const d = this.door; if (d.open && d.t < 1) { d.t = Math.min(1, d.t + dt / 2.4); d.mesh.position.y = d.t * 3.6; if (d.t > 0.5) d.col.off = true; }
     // lights: assign nearest lamps to pool; flicker
     const px = player.x, pz = player.z; const order = this.lamps.map((l, i) => ({ i, d: (l.pos.x - px) ** 2 + (l.pos.z - pz) ** 2 })).sort((a, b) => a.d - b.d);
-    this.lampPool.forEach((l, k) => { const L = this.lamps[order[k].i]; l.position.copy(L.pos); l.color.copy(L.teal ? new THREE.Color(0.35, 1, 0.8) : new THREE.Color(1, 0.7, 0.4)); const fl = 0.85 + 0.15 * Math.sin(time * 9 + L.ph) * Math.sin(time * 3.7 + L.ph * 2) + (Math.sin(time * 31 + L.ph) > 0.97 ? -0.5 : 0); l.intensity = 95 * Math.max(0.2, fl); });
+    this.lampPool.forEach((l, k) => { const L = this.lamps[order[k].i]; l.position.copy(L.pos); l.color.copy(L.teal ? new THREE.Color(0.35, 1, 0.8) : new THREE.Color(1, 0.7, 0.4)); const fl = 0.85 + 0.15 * Math.sin(time * 9 + L.ph) * Math.sin(time * 3.7 + L.ph * 2) + (Math.sin(time * 31 + L.ph) > 0.97 ? -0.5 : 0); l.intensity = (this.lampBase || 95) * Math.max(0.2, fl); });
     this.halos.forEach((h, i) => { const dd = Math.hypot(this.lamps[i].pos.x - px, this.lamps[i].pos.z - pz); h.visible = dd < 70; });
     // crate
     const c = this.crate; c.beam.material.uniforms.k.value = 0.22 + 0.1 * Math.sin(time * 2);

@@ -19,7 +19,7 @@ export class Mats {
     this.headlight = std({ color: 0xe9e4c8, emissive: 0x4a4430, emissiveIntensity: 0.6, roughness: 0.2, metalness: 0.2 });
     this.tarp = std({ color: 0x3f5a4a, roughness: 0.95 });
   }
-  paint(color) { const k = 'p' + color; return this.cache[k] || (this.cache[k] = new THREE.MeshStandardMaterial({ color, map: this.T.rust, roughnessMap: this.T.rustRough, metalness: 0.55, roughness: 1 })); }
+  paint(color) { const k = 'p' + color; if (this.cache[k]) return this.cache[k]; const m = new THREE.MeshStandardMaterial({ color, map: this.T.rust, roughnessMap: this.T.rustRough, metalness: 0.55, roughness: 1 }); m.userData.paint = 1; return (this.cache[k] = m); }
   flat(color, rough = 0.8, metal = 0.1) { const k = 'f' + color + rough + metal; return this.cache[k] || (this.cache[k] = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal })); }
 }
 const PAINTS = [0x5bb5a0, 0xe0d19a, 0xd9792a, 0xb23a2e, 0x5e8fc0, 0xcfcfc4, 0x8aa84a, 0xd2a13a];

@@ -88,6 +88,7 @@ function applyTier(t) {
   renderer.shadowMap.enabled = t > 0; renderer.shadowMap.needsUpdate = true;
   post.build(['direct', 'bloom', 'full'][t]); resize();
   world.setTier(t); zombies.setTier(t); zombies.max = MAP.cap[t > 0 ? 1 : 0]; fx.tier = t; motes.points.visible = t > 0; mist.points.visible = true; mist.o.alpha = t === 0 ? 0.03 : 0.045; beam.visible = t > 0 && P.flashlight;
+  scene.environmentIntensity = t === 0 ? 0.45 : 0.3;
   spot.castShadow = t === 2; for (const z of zombies.list) z.root.traverse((o) => { if (o.isMesh) o.castShadow = t > 0; });
   scene.traverse((o) => { if (o.material && !Array.isArray(o.material)) o.material.needsUpdate = true; });
   document.body.classList.toggle('lowq', t === 0);
