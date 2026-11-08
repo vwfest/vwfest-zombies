@@ -1,0 +1,408 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<!--
+3    Copyright 2019 Google Inc. All Rights Reserved.
+4
+5     Licensed under the Apache License, Version 2.0 (the "License");
+6     you may not use this file except in compliance with the License.
+7     You may obtain a copy of the License at
+8
+9         http://www.apache.org/licenses/LICENSE-2.0
+10
+11     Unless required by applicable law or agreed to in writing, software
+12     distributed under the License is distributed on an "AS IS" BASIS,
+13     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+14     See the License for the specific language governing permissions and
+15     limitations under the License.
+16-->
+17<!--
+18 The "package" attribute is rewritten by the Gradle build with the value of applicationId.
+19     It is still required here, as it is used to derive paths, for instance when referring
+20     to an Activity by ".MyActivity" instead of the full name. If more Activities are added to the
+21     application, the package attribute will need to reflect the correct path in order to use
+22     the abbreviated format.
+23-->
+24<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+25    package="com.vwfest.dustanddead"
+26    android:versionCode="1" >
+27
+28    <uses-sdk
+29        android:minSdkVersion="24"
+30        android:targetSdkVersion="36" />
+31
+32    <queries>
+32-->[com.google.androidbrowserhelper:androidbrowserhelper:2.7.4] /home/box/.gradle/caches/8.11.1/transforms/62aab3209602a2c2ee14a1bdf8ec79b2/transformed/androidbrowserhelper-2.7.4/AndroidManifest.xml:22:5-30:15
+33        <intent>
+33-->[com.google.androidbrowserhelper:androidbrowserhelper:2.7.4] /home/box/.gradle/caches/8.11.1/transforms/62aab3209602a2c2ee14a1bdf8ec79b2/transformed/androidbrowserhelper-2.7.4/AndroidManifest.xml:23:9-29:18
+34            <action android:name="android.intent.action.VIEW" />
+34-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:149:17-68
+34-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:149:25-66
+35
+36            <category android:name="android.intent.category.BROWSABLE" />
+36-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:151:17-77
+36-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:151:27-75
+37
+38            <data android:scheme="https" />
+38-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:152:17-157:19
+38-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:152:23-45
+39        </intent>
+40    </queries>
+41
+42    <permission
+42-->[androidx.core:core:1.17.0] /home/box/.gradle/caches/8.11.1/transforms/1cdcdc1afd1ba58bdf96faeeac79f5ae/transformed/core-1.17.0/AndroidManifest.xml:22:5-24:47
+43        android:name="com.vwfest.dustanddead.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+43-->[androidx.core:core:1.17.0] /home/box/.gradle/caches/8.11.1/transforms/1cdcdc1afd1ba58bdf96faeeac79f5ae/transformed/core-1.17.0/AndroidManifest.xml:23:9-81
+44        android:protectionLevel="signature" />
+44-->[androidx.core:core:1.17.0] /home/box/.gradle/caches/8.11.1/transforms/1cdcdc1afd1ba58bdf96faeeac79f5ae/transformed/core-1.17.0/AndroidManifest.xml:24:9-44
+45
+46    <uses-permission android:name="com.vwfest.dustanddead.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+46-->[androidx.core:core:1.17.0] /home/box/.gradle/caches/8.11.1/transforms/1cdcdc1afd1ba58bdf96faeeac79f5ae/transformed/core-1.17.0/AndroidManifest.xml:26:5-97
+46-->[androidx.core:core:1.17.0] /home/box/.gradle/caches/8.11.1/transforms/1cdcdc1afd1ba58bdf96faeeac79f5ae/transformed/core-1.17.0/AndroidManifest.xml:26:22-94
+47
+48    <application
+48-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:33:5-196:19
+49        android:name="com.vwfest.dustanddead.Application"
+49-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:34:9-35
+50        android:allowBackup="true"
+50-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:35:9-35
+51        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+51-->[androidx.core:core:1.17.0] /home/box/.gradle/caches/8.11.1/transforms/1cdcdc1afd1ba58bdf96faeeac79f5ae/transformed/core-1.17.0/AndroidManifest.xml:28:18-86
+52        android:debuggable="true"
+53        android:extractNativeLibs="false"
+54        android:icon="@mipmap/ic_launcher"
+54-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:36:9-43
+55        android:label="@string/appName"
+55-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:37:9-40
+56        android:manageSpaceActivity="com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity"
+56-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:39:9-105
+57        android:supportsRtl="true"
+57-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:41:9-35
+58        android:theme="@android:style/Theme.Translucent.NoTitleBar" >
+58-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:42:9-68
+59        <meta-data
+59-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:44:9-46:58
+60            android:name="asset_statements"
+60-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:45:13-44
+61            android:resource="@string/assetStatements" />
+61-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:46:13-55
+62        <meta-data
+62-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:49:13-51:58
+63            android:name="web_manifest_url"
+63-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:50:17-48
+64            android:value="@string/webManifestUrl" />
+64-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:51:17-55
+65        <meta-data
+65-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:54:9-56:52
+66            android:name="twa_generator"
+66-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:55:13-41
+67            android:value="@string/generatorApp" />
+67-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:56:13-49
+68
+69        <activity
+69-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:63:13-74:24
+70            android:name="com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity"
+70-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:63:23-104
+71            android:enabled="true"
+71-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:65:17-39
+72            android:excludeFromRecents="true"
+72-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:66:17-50
+73            android:exported="false" >
+73-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:64:17-41
+74            <meta-data
+74-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:67:17-69:57
+75                android:name="android.support.customtabs.trusted.MANAGE_SPACE_URL"
+75-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:68:21-87
+76                android:value="@string/launchUrl" />
+76-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:69:21-54
+77
+78            <intent-filter>
+78-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:70:17-73:33
+79                <action android:name="android.intent.action.APPLICATION_PREFERENCES" />
+79-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:71:21-92
+79-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:71:29-89
+80
+81                <category android:name="android.intent.category.DEFAULT" />
+81-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:72:21-80
+81-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:72:31-77
+82            </intent-filter>
+83        </activity>
+84        <activity
+84-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:77:9-163:20
+85            android:name="com.vwfest.dustanddead.LauncherActivity"
+85-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:77:19-50
+86            android:alwaysRetainTaskState="true"
+86-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:78:13-49
+87            android:exported="true"
+87-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:80:13-36
+88            android:label="@string/launcherName" >
+88-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:79:13-49
+89            <meta-data
+89-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:81:13-82:53
+90                android:name="android.support.customtabs.trusted.DEFAULT_URL"
+90-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:81:24-85
+91                android:value="@string/launchUrl" />
+91-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:82:17-50
+92            <meta-data
+92-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:84:13-86:58
+93                android:name="android.support.customtabs.trusted.STATUS_BAR_COLOR"
+93-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:85:17-83
+94                android:resource="@color/colorPrimary" />
+94-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:86:17-55
+95            <meta-data
+95-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:90:13-92:62
+96                android:name="android.support.customtabs.trusted.STATUS_BAR_COLOR_DARK"
+96-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:91:17-88
+97                android:resource="@color/colorPrimaryDark" />
+97-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:92:17-59
+98            <meta-data
+98-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:94:13-96:61
+99                android:name="android.support.customtabs.trusted.NAVIGATION_BAR_COLOR"
+99-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:95:17-87
+100                android:resource="@color/navigationColor" />
+100-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:96:17-58
+101            <meta-data
+101-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:98:13-100:65
+102                android:name="android.support.customtabs.trusted.NAVIGATION_BAR_COLOR_DARK"
+102-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:99:17-92
+103                android:resource="@color/navigationColorDark" />
+103-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:100:17-62
+104            <meta-data
+104-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:102:13-104:68
+105                android:name="androix.browser.trusted.NAVIGATION_BAR_DIVIDER_COLOR"
+105-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:103:17-84
+106                android:resource="@color/navigationDividerColor" />
+106-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:104:17-65
+107            <meta-data
+107-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:106:13-108:72
+108                android:name="androix.browser.trusted.NAVIGATION_BAR_DIVIDER_COLOR_DARK"
+108-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:107:17-89
+109                android:resource="@color/navigationDividerColorDark" />
+109-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:108:17-69
+110            <meta-data
+110-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:110:13-111:54
+111                android:name="android.support.customtabs.trusted.SPLASH_IMAGE_DRAWABLE"
+111-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:110:24-95
+112                android:resource="@drawable/splash" />
+112-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:111:17-52
+113            <meta-data
+113-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:113:13-114:60
+114                android:name="android.support.customtabs.trusted.SPLASH_SCREEN_BACKGROUND_COLOR"
+114-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:113:24-104
+115                android:resource="@color/backgroundColor" />
+115-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:114:17-58
+116            <meta-data
+116-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:116:13-117:71
+117                android:name="android.support.customtabs.trusted.SPLASH_SCREEN_FADE_OUT_DURATION"
+117-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:116:24-105
+118                android:value="@integer/splashScreenFadeOutDuration" />
+118-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:117:17-69
+119            <meta-data
+119-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:119:13-120:60
+120                android:name="android.support.customtabs.trusted.FILE_PROVIDER_AUTHORITY"
+120-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:119:24-97
+121                android:value="@string/providerAuthority" />
+121-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:120:17-58
+122            <meta-data
+122-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:122:13-97
+123                android:name="android.app.shortcuts"
+123-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:122:24-60
+124                android:resource="@xml/shortcuts" />
+124-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:122:61-94
+125            <meta-data
+125-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:124:13-125:56
+126                android:name="android.support.customtabs.trusted.FALLBACK_STRATEGY"
+126-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:124:24-91
+127                android:value="@string/fallbackType" />
+127-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:125:17-53
+128            <meta-data
+128-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:130:13-131:45
+129                android:name="android.support.customtabs.trusted.DISPLAY_MODE"
+129-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:130:24-86
+130                android:value="immersive" />
+130-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:131:17-42
+131            <meta-data
+131-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:134:13-135:54
+132                android:name="android.support.customtabs.trusted.SCREEN_ORIENTATION"
+132-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:134:24-92
+133                android:value="@string/orientation" />
+133-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:135:17-52
+134
+135            <intent-filter>
+135-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:143:13-146:29
+136                <action android:name="android.intent.action.MAIN" />
+136-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:144:17-69
+136-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:144:25-66
+137
+138                <category android:name="android.intent.category.LAUNCHER" />
+138-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:145:17-77
+138-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:145:27-74
+139            </intent-filter>
+140            <intent-filter android:autoVerify="true" >
+140-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:148:13-158:29
+140-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:148:28-53
+141                <action android:name="android.intent.action.VIEW" />
+141-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:149:17-68
+141-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:149:25-66
+142
+143                <category android:name="android.intent.category.DEFAULT" />
+143-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:72:21-80
+143-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:72:31-77
+144                <category android:name="android.intent.category.BROWSABLE" />
+144-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:151:17-77
+144-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:151:27-75
+145
+146                <data
+146-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:152:17-157:19
+147                    android:host="@string/hostName"
+147-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:153:21-52
+148                    android:pathPrefix="/vwfest-zombies/"
+148-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:155:21-58
+149                    android:scheme="https" />
+149-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:152:23-45
+150            </intent-filter>
+151        </activity>
+152        <activity android:name="com.google.androidbrowserhelper.trusted.FocusActivity" />
+152-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:165:9-90
+152-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:165:19-87
+153        <activity
+153-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:167:9-168:62
+154            android:name="com.google.androidbrowserhelper.trusted.WebViewFallbackActivity"
+154-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:167:19-97
+155            android:configChanges="orientation|screenSize" />
+155-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:168:13-59
+156
+157        <provider
+157-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:170:9-178:20
+158            android:name="androidx.core.content.FileProvider"
+158-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:171:13-62
+159            android:authorities="@string/providerAuthority"
+159-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:172:13-60
+160            android:exported="false"
+160-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:174:13-37
+161            android:grantUriPermissions="true" >
+161-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:173:13-47
+162            <meta-data
+162-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:175:13-177:53
+163                android:name="android.support.FILE_PROVIDER_PATHS"
+163-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:176:17-67
+164                android:resource="@xml/filepaths" />
+164-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:177:17-50
+165        </provider>
+166
+167        <service
+167-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:180:9-191:19
+168            android:name="com.vwfest.dustanddead.DelegationService"
+168-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:181:13-46
+169            android:enabled="@bool/enableNotification"
+169-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:182:13-55
+170            android:exported="@bool/enableNotification" >
+170-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:183:13-56
+171            <intent-filter>
+171-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:187:13-190:29
+172                <action android:name="android.support.customtabs.trusted.TRUSTED_WEB_ACTIVITY_SERVICE" />
+172-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:188:17-105
+172-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:188:25-103
+173
+174                <category android:name="android.intent.category.DEFAULT" />
+174-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:72:21-80
+174-->/workspace/vwfest-zombies/android/app/src/main/AndroidManifest.xml:72:31-77
+175            </intent-filter>
+176        </service>
+177
+178        <!--
+179            ShortcutTrampolineActivity handles static shortcuts defined in shortcuts.xml.
+180            Android's ShortcutService automatically attaches FLAG_ACTIVITY_NEW_TASK and
+181            FLAG_ACTIVITY_CLEAR_TASK to the first intent of every static shortcut.
+182            android:taskAffinity="" is required to prevent ActivityManager from clearing an
+183            existing, running TWA task that shares the app's default package task affinity.
+184            android:excludeFromRecents="true" ensures that this transient, affinity-less
+185            task never surfaces in the user's Recent Apps list.
+186        -->
+187        <activity
+187-->[com.google.androidbrowserhelper:androidbrowserhelper:2.7.4] /home/box/.gradle/caches/8.11.1/transforms/62aab3209602a2c2ee14a1bdf8ec79b2/transformed/androidbrowserhelper-2.7.4/AndroidManifest.xml:43:9-48:62
+188            android:name="com.google.androidbrowserhelper.trusted.ShortcutTrampolineActivity"
+188-->[com.google.androidbrowserhelper:androidbrowserhelper:2.7.4] /home/box/.gradle/caches/8.11.1/transforms/62aab3209602a2c2ee14a1bdf8ec79b2/transformed/androidbrowserhelper-2.7.4/AndroidManifest.xml:44:13-94
+189            android:excludeFromRecents="true"
+189-->[com.google.androidbrowserhelper:androidbrowserhelper:2.7.4] /home/box/.gradle/caches/8.11.1/transforms/62aab3209602a2c2ee14a1bdf8ec79b2/transformed/androidbrowserhelper-2.7.4/AndroidManifest.xml:45:13-46
+190            android:exported="true"
+190-->[com.google.androidbrowserhelper:androidbrowserhelper:2.7.4] /home/box/.gradle/caches/8.11.1/transforms/62aab3209602a2c2ee14a1bdf8ec79b2/transformed/androidbrowserhelper-2.7.4/AndroidManifest.xml:46:13-36
+191            android:taskAffinity=""
+191-->[com.google.androidbrowserhelper:androidbrowserhelper:2.7.4] /home/box/.gradle/caches/8.11.1/transforms/62aab3209602a2c2ee14a1bdf8ec79b2/transformed/androidbrowserhelper-2.7.4/AndroidManifest.xml:47:13-36
+192            android:theme="@android:style/Theme.NoDisplay" />
+192-->[com.google.androidbrowserhelper:androidbrowserhelper:2.7.4] /home/box/.gradle/caches/8.11.1/transforms/62aab3209602a2c2ee14a1bdf8ec79b2/transformed/androidbrowserhelper-2.7.4/AndroidManifest.xml:48:13-59
+193        <activity
+193-->[com.google.androidbrowserhelper:androidbrowserhelper:2.7.4] /home/box/.gradle/caches/8.11.1/transforms/62aab3209602a2c2ee14a1bdf8ec79b2/transformed/androidbrowserhelper-2.7.4/AndroidManifest.xml:49:9-52:65
+194            android:name="com.google.androidbrowserhelper.trusted.ColdShortcutActivity"
+194-->[com.google.androidbrowserhelper:androidbrowserhelper:2.7.4] /home/box/.gradle/caches/8.11.1/transforms/62aab3209602a2c2ee14a1bdf8ec79b2/transformed/androidbrowserhelper-2.7.4/AndroidManifest.xml:50:13-88
+195            android:exported="false"
+195-->[com.google.androidbrowserhelper:androidbrowserhelper:2.7.4] /home/box/.gradle/caches/8.11.1/transforms/62aab3209602a2c2ee14a1bdf8ec79b2/transformed/androidbrowserhelper-2.7.4/AndroidManifest.xml:51:13-37
+196            android:theme="@style/Theme.ColdShortcutActivity" />
+196-->[com.google.androidbrowserhelper:androidbrowserhelper:2.7.4] /home/box/.gradle/caches/8.11.1/transforms/62aab3209602a2c2ee14a1bdf8ec79b2/transformed/androidbrowserhelper-2.7.4/AndroidManifest.xml:52:13-62
+197
+198        <provider
+198-->[androidx.emoji2:emoji2:1.3.0] /home/box/.gradle/caches/8.11.1/transforms/5cb7738f5242d8c4e38c8ffa2b265b31/transformed/emoji2-1.3.0/AndroidManifest.xml:24:9-32:20
+199            android:name="androidx.startup.InitializationProvider"
+199-->[androidx.emoji2:emoji2:1.3.0] /home/box/.gradle/caches/8.11.1/transforms/5cb7738f5242d8c4e38c8ffa2b265b31/transformed/emoji2-1.3.0/AndroidManifest.xml:25:13-67
+200            android:authorities="com.vwfest.dustanddead.androidx-startup"
+200-->[androidx.emoji2:emoji2:1.3.0] /home/box/.gradle/caches/8.11.1/transforms/5cb7738f5242d8c4e38c8ffa2b265b31/transformed/emoji2-1.3.0/AndroidManifest.xml:26:13-68
+201            android:exported="false" >
+201-->[androidx.emoji2:emoji2:1.3.0] /home/box/.gradle/caches/8.11.1/transforms/5cb7738f5242d8c4e38c8ffa2b265b31/transformed/emoji2-1.3.0/AndroidManifest.xml:27:13-37
+202            <meta-data
+202-->[androidx.emoji2:emoji2:1.3.0] /home/box/.gradle/caches/8.11.1/transforms/5cb7738f5242d8c4e38c8ffa2b265b31/transformed/emoji2-1.3.0/AndroidManifest.xml:29:13-31:52
+203                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+203-->[androidx.emoji2:emoji2:1.3.0] /home/box/.gradle/caches/8.11.1/transforms/5cb7738f5242d8c4e38c8ffa2b265b31/transformed/emoji2-1.3.0/AndroidManifest.xml:30:17-75
+204                android:value="androidx.startup" />
+204-->[androidx.emoji2:emoji2:1.3.0] /home/box/.gradle/caches/8.11.1/transforms/5cb7738f5242d8c4e38c8ffa2b265b31/transformed/emoji2-1.3.0/AndroidManifest.xml:31:17-49
+205            <meta-data
+205-->[androidx.lifecycle:lifecycle-process:2.6.2] /home/box/.gradle/caches/8.11.1/transforms/4bc52031417e9743197e36b704fe409f/transformed/lifecycle-process-2.6.2/AndroidManifest.xml:29:13-31:52
+206                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+206-->[androidx.lifecycle:lifecycle-process:2.6.2] /home/box/.gradle/caches/8.11.1/transforms/4bc52031417e9743197e36b704fe409f/transformed/lifecycle-process-2.6.2/AndroidManifest.xml:30:17-78
+207                android:value="androidx.startup" />
+207-->[androidx.lifecycle:lifecycle-process:2.6.2] /home/box/.gradle/caches/8.11.1/transforms/4bc52031417e9743197e36b704fe409f/transformed/lifecycle-process-2.6.2/AndroidManifest.xml:31:17-49
+208            <meta-data
+208-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:29:13-31:52
+209                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+209-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:30:17-85
+210                android:value="androidx.startup" />
+210-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:31:17-49
+211        </provider>
+212
+213        <receiver
+213-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:34:9-52:20
+214            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+214-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:35:13-76
+215            android:directBootAware="false"
+215-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:36:13-44
+216            android:enabled="true"
+216-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:37:13-35
+217            android:exported="true"
+217-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:38:13-36
+218            android:permission="android.permission.DUMP" >
+218-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:39:13-57
+219            <intent-filter>
+219-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:40:13-42:29
+220                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+220-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:41:17-91
+220-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:41:25-88
+221            </intent-filter>
+222            <intent-filter>
+222-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:43:13-45:29
+223                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+223-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:44:17-85
+223-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:44:25-82
+224            </intent-filter>
+225            <intent-filter>
+225-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:46:13-48:29
+226                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+226-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:47:17-88
+226-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:47:25-85
+227            </intent-filter>
+228            <intent-filter>
+228-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:49:13-51:29
+229                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+229-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:50:17-95
+229-->[androidx.profileinstaller:profileinstaller:1.3.1] /home/box/.gradle/caches/8.11.1/transforms/bb4a0d32d1b17a1dcea0cf71d2bde5e0/transformed/profileinstaller-1.3.1/AndroidManifest.xml:50:25-92
+230            </intent-filter>
+231        </receiver>
+232    </application>
+233
+234</manifest>

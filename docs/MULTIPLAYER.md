@@ -24,3 +24,6 @@ Gate purchases, distance-checked weapon stations/refills, shared window planks (
 `DEV_HOOKS=1` enables explicit localhost smoke-test fixtures (teleports, health, points and drops). They are disabled by default and forcibly disabled with NODE_ENV=production. NEVER enable on a public server. The smoke test uses these to exercise interactions without relying on random spawns.
 
 Remaining: full navigation/pathfinding around clutter (zombies can get stuck), authoritative magazine/reload counts, latency/loss and real-device soak tests. Collision data is an exported snapshot; regenerate it if map geometry changes. No persistent rooms. A server restart discards matches.
+
+## Deployment preparation
+See `docs/RENDER.md` and the root `render.yaml`. `coop-live` intentionally excludes the Android/TWA project; that work remains on `app-multiplayer`. Client still points at localhost until the real wss:// URL is supplied. Main is untouched.

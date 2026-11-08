@@ -1,0 +1,24 @@
+# Blueprint scaffold only. Nothing deployed by this commit.
+services:
+  - type: web
+    name: vwfest-zombies-coop
+    runtime: node
+    plan: free
+    branch: coop-live
+    rootDir: server
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22
+      - key: HOST
+        value: 0.0.0.0
+      - key: ALLOWED_ORIGINS
+        value: https://vwfest.github.io
+      - key: DEV_HOOKS
+        value: '0'
+      - key: TRUST_PROXY
+        value: '1'
