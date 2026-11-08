@@ -7,6 +7,7 @@ import { getMode, scaled } from './modes.js';
 import { Zombies } from './zombie.js';
 import { upgradeZombies } from './hd/zombies.js';
 import { loadPacks } from './hd/pack.js';
+import { addGore } from './hd/gore.js';
 import { makeMinimap } from './minimap.js';
 await loadPacks(); // pre-baked models, fetched separately (assets/*.bin)
 import { FX, Motes, Post } from './fx.js';
@@ -49,7 +50,7 @@ const fx = new FX(scene, textures, tier);
 const motes = new Motes(textures, 260, { R: 20, y0: 0.3, y1: 6, size: 0.07, alpha: 0.22 }); scene.add(motes.points);
 const mist = new Motes(textures, 46, { R: 55, y0: 0.4, y1: 2.2, size: 5.5, alpha: 0.045, col: [0.55, 0.5, 0.62], additive: false, speed: 0.7 }); scene.add(mist.points);
 const zombies = new Zombies(scene, world, tier);
-window.__hd = upgradeZombies(zombies); zombies.cam = cam;
+window.__hd = upgradeZombies(zombies); addGore(zombies); zombies.cam = cam;
 let mm; const minimap = (dt) => (mm || (mm = makeMinimap(world, zombies, P)))(dt);
 const viewScene = new THREE.Scene(); const post = new Post(renderer, scene, cam, viewScene);
 
@@ -95,7 +96,12 @@ function resize() {
   const w = window.innerWidth, h = window.innerHeight; renderer.setSize(w, h, false); canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
   cam.aspect = w / h; cam.fov = w / h < 0.9 ? FOV + 14 : FOV; cam.updateProjectionMatrix(); post.setSize(w, h, renderer.getPixelRatio()); fx.setScale(h * renderer.getPixelRatio(), cam.fov); mist.ps.uniforms.uScale.value = fx.soft.uniforms.uScale.value; motes.ps.uniforms.uScale.value = fx.soft.uniforms.uScale.value;
 }
-window.addEventListener('resize', resize);
+window.addEventListener('resize', resize); window.visualViewport?.addEventListener('resize', resize); screen.orientation?.addEventListener?.('change', () => setTimeout(resize, 120));
+// Fullscreen + landscape lock (Android/Chrome). iPhone Safari has no element fullscreen/orientation lock: button hidden, rotate overlay guides instead.
+const fsEl = document.documentElement, canFS = !!(fsEl.requestFullscreen || fsEl.webkitRequestFullscreen);
+document.body.classList.toggle('nofs', !canFS);
+async function goFull() { try { if (!document.fullscreenElement && !document.webkitFullscreenElement) { const r = fsEl.requestFullscreen ? fsEl.requestFullscreen({ navigationUI: 'hide' }) : fsEl.webkitRequestFullscreen?.(); await r?.catch?.(() => {}); } } catch (e) {} try { await screen.orientation?.lock?.('landscape'); } catch (e) {} setTimeout(resize, 150); }
+['btnFull', 'btnFull2'].forEach((id) => { const b = document.getElementById(id); if (b) b.addEventListener('click', (e) => { e.stopPropagation(); goFull(); }); });
 let fpsAcc = 0, fpsN = 0, adaptGrace = 3;
 function adapt(raw) {
   if (G.state !== 'playing' || pref !== 'auto' || qs.has('noadapt')) return; if (adaptGrace > 0) { adaptGrace -= raw; return; }
@@ -332,7 +338,7 @@ function newGame() {
 function startGame() {
   sfx.init(); newGame(); lb.start(); G.state = 'playing'; showGun(); ['menu', 'over', 'pause'].forEach((i) => $(i).classList.add('hidden')); $('hud').classList.remove('hidden'); $('touch').classList.toggle('hidden', !isTouch);
   beam.visible = tier > 0 && P.flashlight; adaptGrace = 3; fpsAcc = 0; fpsN = 0;
-  if (!isTouch && !qs.has('test')) { try { const r = canvas.requestPointerLock?.(); r?.catch?.(() => {}); } catch (e) {} } else if (isTouch) { try { document.documentElement.requestFullscreen?.().catch(() => {}); screen.orientation?.lock?.('landscape').catch(() => {}); } catch (e) {} }
+  if (!isTouch && !qs.has('test')) { try { const r = canvas.requestPointerLock?.(); r?.catch?.(() => {}); } catch (e) {} } else if (isTouch) goFull();
   toast(isTouch ? 'Hold E at windows to repair · Open the gate for new guns' : 'Hold E at windows to repair · Open the gate for new guns');
 }
 function pause() { if (G.state !== 'playing' || P.dead) return; G.state = 'paused'; $('pause').classList.remove('hidden'); input.fire = false; input.f = input.s = 0; if (document.pointerLockElement) document.exitPointerLock?.(); setPrompt(''); }

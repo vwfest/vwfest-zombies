@@ -1,0 +1,11 @@
+{
+  "name": "DUST & DEAD — $VWFEST Junkyard Survival",
+  "short_name": "DUST & DEAD",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#05080c",
+  "theme_color": "#05080c",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
