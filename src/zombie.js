@@ -69,7 +69,7 @@ export class Zombies {
     return best;
   }
   damage(z, dmg, head, p, n) {
-    if (z.state === 'dead' || z.state === 'dying') return null; z.hp -= dmg; z.flash = 0.12; z.hitT = 0.15; const killed = z.hp <= 0;
+    if (z.state === 'dead' || z.state === 'dying') return null; z.hp -= dmg; z.flash = 0.2; z.hitT = 0.22; const killed = z.hp <= 0;
     if (killed) { z.state = 'dying'; z.dieT = 0; this.alive--; z.dieDir = rnd(-0.4, 0.4); }
     else if (z.state === 'attack' || z.state === 'approach') { /* keep going */ } return { killed, head };
   }
@@ -80,10 +80,10 @@ export class Zombies {
     for (let i = 0; i < this.list.length; i++) {
       const z = this.list[i]; if (z.state === 'dead') continue; const s = z.scale;
       // flash
-      if (z.flash > 0) { z.flash -= dt; const e = Math.max(0, z.flash / 0.12); for (const m of [z.sk, z.sh, z.pa]) m.emissive.setRGB(0.9 * e, 0.08 * e, 0.05 * e); }
+      if (z.flash > 0) { z.flash -= dt; const e = Math.max(0, z.flash / 0.2); for (const m of [z.sk, z.sh, z.pa]) m.emissive.setRGB(1.15 * e, 0.16 * e, 0.05 * e); }
       if (z.state === 'dying') { z.dieT += dt; const k = Math.min(1, z.dieT / 0.55); z.pelvis.rotation.x = -k * 1.5 * (1 - 0.1); z.pelvis.rotation.z = z.dieDir * k; z.pelvis.position.y = 0.95 - k * 0.55; z.armL.rotation.x = -1.4 + k * 2.2; z.armR.rotation.x = -1.4 + k * 2.2; if (z.dieT > 2.2) z.root.position.y = -(z.dieT - 2.2) * 0.9; if (z.dieT > 3.2) { z.state = 'dead'; z.root.visible = false; z.root.position.y = 0; z.pelvis.position.y = 0.95; z.pelvis.rotation.set(0, 0, 0); } continue; }
       z.groanT -= dt; if (z.groanT <= 0) { z.groanT = rnd(2.5, 6); const dx = z.pos.x - player.x, dz = z.pos.z - player.z, dist = Math.hypot(dx, dz); if (dist < 40) cb.groan?.(z, dist); }
-      let mvx = 0, mvz = 0, sp = 0, armPose = -1.3;
+      let mvx = 0, mvz = 0, sp = 0;
       const px = player.x, pz = player.z;
       if (z.state === 'approach') {
         const w = z.win, tx = w.out.x + w.t.x * z.slot * 0.8, tz = w.out.z + w.t.z * z.slot * 0.8; const dx = tx - z.pos.x, dz = tz - z.pos.z, d = Math.hypot(dx, dz);
@@ -92,10 +92,10 @@ export class Zombies {
       } else if (z.state === 'attack') {
         const w = z.win; z.yaw = lerpAng(z.yaw, Math.atan2(-w.n.x, -w.n.z), Math.min(1, dt * 8)); z.cool -= dt;
         if (w.count <= 0) { z.state = 'climb'; z.climbT = 0; }
-        else { z.attackT += dt; armPose = -1.2 + Math.sin(z.attackT * 7) * 0.7; if (z.cool <= 0 && w.count > 0) { z.cool = rnd(1.2, 2.0); if (w.cool <= 0 && W.removePlank(w)) { w.cool = rnd(2.2, 3.2); cb.plank?.(w, true); } } }
+        else { z.attackT += dt; if (z.cool <= 0 && w.count > 0) { z.cool = rnd(1.2, 2.0); if (w.cool <= 0 && W.removePlank(w)) { w.cool = rnd(2.2, 3.2); cb.plank?.(w, true); } } }
       } else if (z.state === 'climb') {
         const w = z.win; z.climbT += dt / 1.25; const k = Math.min(1, z.climbT); const sx = w.out.x + w.t.x * z.slot * 0.8, sz = w.out.z + w.t.z * z.slot * 0.8, ex = w.in.x + w.t.x * z.slot * 0.5, ez = w.in.z + w.t.z * z.slot * 0.5;
-        z.pos.x = sx + (ex - sx) * k; z.pos.z = sz + (ez - sz) * k; z.climbY = Math.sin(k * Math.PI) * 0.75; z.root.position.y = z.climbY; z.yaw = lerpAng(z.yaw, Math.atan2(-w.n.x, -w.n.z), Math.min(1, dt * 8)); armPose = -1.6; sp = 1.5;
+        z.pos.x = sx + (ex - sx) * k; z.pos.z = sz + (ez - sz) * k; z.climbY = Math.sin(k * Math.PI) * 0.75; z.root.position.y = z.climbY; z.yaw = lerpAng(z.yaw, Math.atan2(-w.n.x, -w.n.z), Math.min(1, dt * 8)); sp = 1.5;
         if (k >= 1) { z.state = 'chase'; z.climbY = 0; z.root.position.y = 0; }
       } else { // chase
         let tx = px, tz = pz; const zArea = areaOf(z.pos.z);
@@ -114,20 +114,31 @@ export class Zombies {
         if (pd < 1.35 && zArea === pArea) {
           if (z.attackT <= 0 && z.cool <= 0) { z.attackT = 0.01; }
         }
-        if (z.attackT > 0) { z.attackT += dt; armPose = -2.2 + Math.min(1, z.attackT / 0.4) * 1.1; if (z.attackT > 0.42) { if (pd < 1.7 && zArea === pArea) cb.hitPlayer?.(z); z.attackT = 0; z.cool = 1.05; } sp *= 0.3; }
+        if (z.attackT > 0) { z.attackT += dt; if (z.attackT > 0.42) { if (pd < 1.7 && zArea === pArea) cb.hitPlayer?.(z); z.attackT = 0; z.cool = 1.05; } sp *= 0.3; }
         z.pos.x += dx * sp * dt; z.pos.z += dz * sp * dt; mvx = dx; mvz = dz; W.resolve(z.pos, 0.36 * s);
         z.yaw = lerpAng(z.yaw, Math.atan2(player.x - z.pos.x, player.z - z.pos.z) * (pd < 4 ? 1 : 0) + Math.atan2(dx, dz) * (pd < 4 ? 0 : 1), Math.min(1, dt * 9));
         if (pd < 4) z.yaw = lerpAng(z.yaw, Math.atan2(px - z.pos.x, pz - z.pos.z), Math.min(1, dt * 9));
         // stuck detection
         z.chk += dt; if (z.chk > 0.5) { const mv = Math.hypot(z.pos.x - z.chkX, z.pos.z - z.chkZ); if (sp > 0.5 && mv < sp * 0.5 * 0.3) { z.stuck = 1.0; z.side = Math.random() < 0.5 ? -1 : 1; z.stuckTot += 0.5; } else z.stuckTot = Math.max(0, z.stuckTot - 0.25); z.chkX = z.pos.x; z.chkZ = z.pos.z; z.chk = 0; if (z.stuckTot > 6) { this.reroute(z); } }
       }
-      // pose
+      // pose — shamble: arms oppose the legs, one arm strikes, hits snap the torso back
       z.root.rotation.y = z.yaw; if (z.state !== 'climb') z.root.position.y = 0;
-      const ws = sp > 0.1 ? sp : 0; z.phase += ws * dt * (z.runner ? 2.2 : 3.0) / Math.max(0.6, s); const sw = Math.sin(z.phase), amp = Math.min(0.75, 0.25 + ws * 0.14);
+      const ws = sp > 0.1 ? sp : 0; z.phase += ws * dt * (z.runner ? 2.4 : 2.7) / Math.max(0.6, s); const sw = Math.sin(z.phase), amp = Math.min(0.8, 0.28 + ws * 0.13);
       z.legL.rotation.x = sw * amp; z.legR.rotation.x = -sw * amp * (z.limp ? 0.35 : 1);
-      const lean = 0.12 + Math.min(0.35, ws * 0.06) + (z.runner ? 0.12 : 0); z.upper.rotation.x = lean + Math.abs(Math.sin(z.phase)) * 0.04; z.upper.rotation.z = Math.sin(z.phase * 0.5) * 0.06 * (z.limp ? 2 : 1); z.upper.rotation.y = Math.sin(z.phase * 0.5) * 0.12;
-      z.armL.rotation.x = armPose + Math.sin(z.phase + 1) * 0.15 + (z.state === 'chase' && z.attackT <= 0 ? 0 : 0); z.armR.rotation.x = armPose + (z.state === 'attack' ? Math.sin(z.attackT * 7 + 1.6) * 0.7 - Math.sin(z.attackT * 7) * 0.7 : 0) + Math.sin(z.phase + 3) * 0.15;
-      z.armL.rotation.z = 0.12; z.armR.rotation.z = -0.12; z.head.rotation.z = Math.sin(z.phase * 0.5 + 1) * 0.12; z.head.rotation.x = 0.1; z.pelvis.position.y = 0.95 + Math.abs(Math.sin(z.phase)) * 0.03;
+      if (z.hitT > 0) z.hitT = Math.max(0, z.hitT - dt);
+      const flinch = z.hitT > 0 ? z.hitT / 0.22 : 0;
+      const lean = 0.1 + Math.min(0.28, ws * 0.05) + (z.runner ? 0.16 : 0) + (z.brute ? 0.1 : 0) - flinch * 0.42;
+      z.upper.rotation.x = lean + Math.abs(sw) * 0.035; z.upper.rotation.z = Math.sin(z.phase * 0.5) * 0.07 * (z.limp ? 2 : 1); z.upper.rotation.y = Math.sin(z.phase * 0.5) * 0.16;
+      const reach = z.brute ? -0.58 : -0.74, swing = Math.min(0.62, 0.2 + ws * 0.1) * (z.runner ? 1.28 : 1);
+      let axL, axR;
+      if (z.state === 'climb') { axL = axR = -1.5; }
+      else if (z.state === 'attack') { const swn = Math.sin(z.attackT * 7); axR = -0.5 + swn * 0.95; axL = reach + 0.12; }
+      else if (z.attackT > 0) { const strike = Math.sin(Math.min(1, z.attackT / 0.42) * Math.PI); axR = reach - strike * 1.15; axL = reach + sw * swing * 0.3; }
+      else { axL = reach - sw * swing; axR = reach + sw * swing * (z.limp ? 0.4 : 1); }
+      z.armL.rotation.x = axL + flinch * 0.3; z.armR.rotation.x = axR + flinch * 0.3;
+      const wide = z.brute ? 0.28 : 0.16; z.armL.rotation.z = wide; z.armR.rotation.z = -wide;
+      z.head.rotation.x = 0.08 + Math.sin(z.phase * 0.5) * 0.05 - flinch * 0.5; z.head.rotation.y = Math.sin(z.phase * 0.5) * 0.1; z.head.rotation.z = Math.sin(z.phase * 0.5 + 1) * 0.1 + flinch * 0.15;
+      z.pelvis.position.y = 0.95 + Math.abs(sw) * (ws > 0.2 ? 0.05 : 0.02);
     }
   }
   reroute(z) { const act = this.world.windows.filter((w) => w.area === 'A' || this.world.door.open); const w = pick(act); z.win = w; z.state = 'approach'; z.stuckTot = 0; z.stuck = 0; z.pos.set(w.out.x + w.n.x * 3, 0, w.out.z + w.n.z * 3); }

@@ -24,7 +24,7 @@ No server, no accounts, no CDN — Three.js is bundled into `game.js`; high scor
 | Look | mouse (pointer lock) | drag on the right side |
 | Fire | left click | big red button |
 | Reload / use / swap | `R` / `E` (hold to repair) / `1` `2` `Q` / wheel | `R` / `E` / ⇄ |
-| Flashlight, mute, pause | `F`, `M`, `Esc` / `P` | speaker + pause buttons |
+| Flashlight, mute, pause | `F`, `M`, `Esc` / `P` | lamp button, speaker, pause |
 
 ## Graphics
 Desktop (High): PBR materials with procedural textures + sky-derived environment map, dynamic shadows (moon + shadowed flashlight), flashlight/muzzle-flash/lamp lights, exponential fog + volumetric-style light cones and drifting mist/dust, GTAO ambient occlusion, bloom, colour grading, vignette, chromatic aberration, film grain, damage vignette; blood-mist/spark/dust particles, shell casings, tracers, hit markers, screen shake. Stylised (cartoon) gore only.

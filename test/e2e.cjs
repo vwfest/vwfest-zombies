@@ -26,7 +26,13 @@ async function run(b, name, mobile, quality) {
   await p.waitForFunction(() => __game.G.state === 'playing', null, { timeout: 15000 }).catch(() => {});
   ok(await p.evaluate(() => __game.G.state === 'playing'), 'Play starts the game');
   ok(await p.evaluate(() => !document.getElementById('hud').classList.contains('hidden')), 'HUD visible');
-  if (mobile) ok(await p.evaluate(() => !document.getElementById('touch').classList.contains('hidden') && getComputedStyle(document.getElementById('bFire')).display !== 'none'), 'touch controls visible');
+  if (mobile) {
+    ok(await p.evaluate(() => !document.getElementById('touch').classList.contains('hidden') && getComputedStyle(document.getElementById('bFire')).display !== 'none'), 'touch controls visible');
+    ok(await p.evaluate(() => ['btnPause', 'btnMute', 'bLamp'].every((id) => { const el = document.getElementById(id); const r = el.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!(el && top && (top === el || el.contains(top))); })), 'pause, mute and flashlight sit above the touch layer');
+    await p.tap('#bLamp'); ok(await p.evaluate(() => __game.P.flashlight === false && document.getElementById('bLamp').classList.contains('off')), 'flashlight button turns the light off');
+    await p.tap('#bLamp'); ok(await p.evaluate(() => __game.P.flashlight === true && !document.getElementById('bLamp').classList.contains('off')), 'flashlight button turns the light back on');
+    ok(await p.evaluate(() => { __game.tick(0.05); const a = document.getElementById('roundBox').getBoundingClientRect(), b = document.getElementById('minimap').getBoundingClientRect(); return b.width > 40 && a.bottom <= b.top + 2; }), 'minimap sits below the round badge');
+  }
   await sim(p, 120); // intermission -> round 1
   const r1 = await p.evaluate(() => ({ round: __game.G.round, alive: __game.zombies.alive }));
   ok(r1.round === 1, 'round 1 started'); await sim(p, 80); ok(await p.evaluate(() => __game.zombies.alive > 0), 'zombies spawn');
@@ -56,6 +62,19 @@ async function run(b, name, mobile, quality) {
   // kill with headshot
   await p.evaluate(() => { const g = __game; const z = g.zombies.list.find((z) => z.state === 'chase'); for (let i = 0; i < 6 && z.state === 'chase'; i++) { g.aimAt(z, true); g.P.fireCd = 0; g.input.fire = false; g.tick(0.016); g.input.fire = true; g.tick(0.016); g.input.fire = false; g.tick(0.05); } });
   const k = await p.evaluate(() => ({ kills: __game.P.kills, heads: __game.P.heads, pts: __game.P.pts })); ok(k.kills >= 1, 'zombie can be killed'); ok(k.heads >= 1, 'headshot registers (' + k.heads + ')');
+  const feel = await p.evaluate(() => {
+    const g = __game; const saved = g.P.slots.map((s) => s && { id: s.id, mag: s.mag, reserve: s.reserve }); const cur = g.P.cur;
+    g.P.slots[0] = { id: 'shotgun', mag: 2, reserve: 4 }; g.P.cur = 0; g.P.fireCd = 0; g.P.switchT = 0; g.P.reloadT = 0;
+    g.fx.casData.forEach((d) => (d.t = 0)); g.shoot(); const shells = g.fx.casData.filter((d) => d.t > 0).length;
+    g.P.slots = saved.map((s) => s && { id: s.id, mag: s.mag, reserve: s.reserve }); g.P.cur = cur; g.P.fireCd = 0; g.P.switchT = 0; g.P.reloadT = 0;
+    g.zombies.reset(); const z = g.zombies.spawn(g.world.windows[1], 2); z.state = 'chase'; z.speed = 2.2; z.pos.set(3, 0, 2); z.phase = 0.4; const xs = [];
+    for (let i = 0; i < 24; i++) { g.tick(0.05); xs.push(z.armL.rotation.x); }
+    const swing = Math.max(...xs) - Math.min(...xs); const lean = z.upper.rotation.x;
+    g.zombies.damage(z, 1, false, { x: z.pos.x, y: 1, z: z.pos.z }, { x: 0, y: 0, z: 1 }); g.tick(0.016);
+    return { shells, swing: +swing.toFixed(2), flinch: z.state === 'chase' && z.hitT > 0 && z.upper.rotation.x < lean - 0.05, eyes: !!(z.eyeL && z.eyeR && g.zombies.eyeMesh) };
+  });
+  console.log('  info: combat feel', JSON.stringify(feel));
+  ok(feel.shells >= 1, 'shotgun ejects a shell'); ok(feel.swing > 0.45, 'walking zombies swing their arms (' + feel.swing + ' rad)'); ok(feel.flinch, 'hits flinch the torso'); ok(feel.eyes, 'zombies carry eye glints');
   // ---- reload
   await p.evaluate(() => { __game.input.fire = false; __game.P.fireCd = 0; __game.P.switchT = 0; }); await (mobile ? p.evaluate(() => { __game.input.reload = true; }) : p.keyboard.press('KeyR')); await sim(p, 40);
   ok(await p.evaluate(() => __game.P.slots[0].mag === 12), 'reload refills the magazine');

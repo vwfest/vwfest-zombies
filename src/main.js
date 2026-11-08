@@ -49,7 +49,7 @@ const fx = new FX(scene, textures, tier);
 const motes = new Motes(textures, 260, { R: 20, y0: 0.3, y1: 6, size: 0.07, alpha: 0.22 }); scene.add(motes.points);
 const mist = new Motes(textures, 46, { R: 55, y0: 0.4, y1: 2.2, size: 5.5, alpha: 0.045, col: [0.55, 0.5, 0.62], additive: false, speed: 0.7 }); scene.add(mist.points);
 const zombies = new Zombies(scene, world, tier);
-window.__hd = upgradeZombies(zombies);
+window.__hd = upgradeZombies(zombies); zombies.cam = cam;
 let mm; const minimap = (dt) => (mm || (mm = makeMinimap(world, zombies, P)))(dt);
 const viewScene = new THREE.Scene(); const post = new Post(renderer, scene, cam, viewScene);
 
@@ -84,7 +84,7 @@ function applyTier(t) {
   renderer.setPixelRatio(pr); post.pr = pr;
   renderer.shadowMap.enabled = t > 0; renderer.shadowMap.needsUpdate = true;
   post.build(['direct', 'bloom', 'full'][t]); resize();
-  world.setTier(t); zombies.setTier(t); zombies.max = MAP.cap[t > 0 ? 1 : 0]; fx.tier = t; motes.points.visible = t > 0; mist.points.visible = t > 0; beam.visible = t > 0 && P.flashlight;
+  world.setTier(t); zombies.setTier(t); zombies.max = MAP.cap[t > 0 ? 1 : 0]; fx.tier = t; motes.points.visible = t > 0; mist.points.visible = true; mist.o.alpha = t === 0 ? 0.03 : 0.045; beam.visible = t > 0 && P.flashlight;
   spot.castShadow = t === 2; for (const z of zombies.list) z.root.traverse((o) => { if (o.isMesh) o.castShadow = t > 0; });
   scene.traverse((o) => { if (o.material && !Array.isArray(o.material)) o.material.needsUpdate = true; });
   document.body.classList.toggle('lowq', t === 0);
@@ -126,7 +126,7 @@ function updateHUD() {
 function setPrompt(html, ok = true) { const e = $('prompt'); if (html !== hud.prompt) { hud.prompt = html; e.innerHTML = html; cspStyles(e); e.classList.toggle('on', !!html); } }
 
 /* ---------------- weapons ---------------- */
-function showGun() { for (const k in gunCache) gunCache[k].visible = false; const g = gunModel(cur().id); g.visible = G.state === 'playing' || P.dead; g.add(flashSprite); flashSprite.position.copy(g.userData.muzzle.position).add(new THREE.Vector3(0, 0, -0.04)); P.gun = g; }
+function showGun() { for (const k in gunCache) gunCache[k].visible = false; const g = gunModel(cur().id); g.visible = G.state === 'playing' || P.dead; g.scale.setScalar(isTouch ? 0.78 : 0.9); g.add(flashSprite); flashSprite.position.copy(g.userData.muzzle.position).add(new THREE.Vector3(0, 0, -0.04)); P.gun = g; }
 function switchTo(i) { if (i === P.cur || !P.slots[i] || P.switchT > 0) return; P.cur = i; P.reloadT = 0; P.switchT = 0.32; showGun(); sfx.click(0, 2500, 0.3); }
 function giveWeapon(id) { // buy / crate: replace current if both slots used
   const have = P.slots.findIndex((s) => s && s.id === id); if (have >= 0) { const s = P.slots[have]; s.mag = WEAPONS[id].mag; s.reserve = WEAPONS[id].reserve; return; }
@@ -156,7 +156,7 @@ function shoot() {
   }
   // muzzle effects
   muzzleLight.intensity = 55; gunFlash.intensity = 6; G.muzzleT = 0.06; flashSprite.visible = true; { const f = P.gun.userData.flash; if (f) { f.visible = true; f.rotation.z = rnd(TAU); f.scale.setScalar(rnd(0.8, 1.3) * (W.id === 'shotgun' ? 1.5 : 1)); } P.gun.userData.slideT = 1; } flashSprite.material.rotation = rnd(TAU); flashSprite.scale.setScalar(rnd(0.25, 0.42) * (W.id === 'shotgun' ? 1.4 : 1)); fx.flash(_m, base); fx.smoke(_m, base, 1);
-  if (fx.maxCas) { const v = new THREE.Vector3().copy(_r).multiplyScalar(rnd(1.2, 2.4)).addScaledVector(_u, rnd(1.2, 2.2)).addScaledVector(base, rnd(-0.3, 0.5)); if (s.id !== 'shotgun' || Math.random() < 0.0) fx.casing(_e, v); }
+  if (fx.maxCas) { const v = new THREE.Vector3().copy(_r).multiplyScalar(rnd(1.2, 2.4)).addScaledVector(_u, rnd(1.2, 2.2)).addScaledVector(base, rnd(-0.3, 0.5)); fx.casing(_e, v); }
   P.rP += W.kick * rnd(0.85, 1.15); P.rY += rnd(-1, 1) * W.kick * 0.45; P.shake = Math.min(1, P.shake + W.shake * 0.5);
   if (W.perShell === true && s.mag > 0) setTimeout(() => sfx.pump(), 260);
   // apply damage
@@ -165,7 +165,7 @@ function shoot() {
     sfx.zhit(pan(z.pos), e.head); fx.blood(e.p, e.n, e.head ? 14 : 8); fx.sparks(e.p, e.n, 2);
     let gain = 10 * dbl; const hm = $('hitm'); hm.classList.remove('on', 'kill'); void hm.offsetWidth; hm.classList.add('on'); sfx.tick(false);
     if (r.killed) { gain = (e.head ? 100 : z.value) * dbl; P.kills++; G.kills++; if (e.head) P.heads++; hm.classList.add('kill'); sfx.tick(true); sfx.zdie(pan(z.pos), 0.5); fx.blood(e.p, e.n, 26, 1.4); fx.dust(new THREE.Vector3(z.pos.x, 0.3, z.pos.z), { x: 0, y: 1, z: 0 }, 5); P.shake = Math.min(1, P.shake + 0.1); maybeDrop(z); medKitOnKill(z); }
-    setTimeout(() => hm.classList.remove('on'), 140);
+    setTimeout(() => hm.classList.remove('on'), r.killed ? 280 : 190);
     P.pts += gain; popText('+' + gain, e.head && r.killed);
   }
   if (s.mag === 0 && !P.reloadT) setTimeout(() => G.state === 'playing' && startReload(), 220);
@@ -395,7 +395,7 @@ const keys = {};
 function updateAxes() { input.f = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0); input.s = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0); input.sprint = !!(keys.ShiftLeft || keys.ShiftRight); }
 addEventListener('keydown', (e) => { if (e.target && e.target.tagName === 'INPUT') return;
   if (e.repeat) return; keys[e.code] = true; if (G.state === 'playing' && !P.dead) {
-    if (e.code === 'KeyR') input.reload = true; if (e.code === 'KeyE') { input.interact = true; input.interactEdge = true; } if (e.code === 'Digit1') switchTo(0); if (e.code === 'Digit2') switchTo(1); if (e.code === 'KeyQ') switchTo(1 - P.cur); if (e.code === 'KeyF') { P.flashlight = !P.flashlight; spot.visible = P.flashlight; beam.visible = tier > 0 && P.flashlight; sfx.click(0, 1200, 0.4); } if (e.code === 'KeyP') pause();
+    if (e.code === 'KeyR') input.reload = true; if (e.code === 'KeyE') { input.interact = true; input.interactEdge = true; } if (e.code === 'Digit1') switchTo(0); if (e.code === 'Digit2') switchTo(1); if (e.code === 'KeyQ') switchTo(1 - P.cur); if (e.code === 'KeyF') setFlash(!P.flashlight); if (e.code === 'KeyP') pause();
   } else if (G.state === 'paused' && e.code === 'KeyP') resume();
   if (e.code === 'KeyM') toggleMute(); if (e.code === 'Enter' && (G.state === 'menu' || G.state === 'over')) startGame(); updateAxes();
 });
@@ -426,8 +426,9 @@ if (isTouch) {
   const end = (e) => { for (const t of e.changedTouches) { if (t.identifier === stickId) { stickId = null; kn.style.transform = ''; input.s = input.f = 0; } else if (t.identifier === lookId) lookId = null; } };
   touchLayer.addEventListener('touchend', end); touchLayer.addEventListener('touchcancel', end);
   const bind = (id, down, up) => { const b = $(id); b.addEventListener('touchstart', (e) => { b.classList.add('down'); down(); e.preventDefault(); e.stopPropagation(); }, { passive: false }); const u = (e) => { b.classList.remove('down'); up?.(); e.preventDefault(); }; b.addEventListener('touchend', u); b.addEventListener('touchcancel', u); };
-  bind('bFire', () => (input.fire = true), () => (input.fire = false)); bind('bReload', () => (input.reload = true)); bind('bUse', () => { input.interact = true; input.interactEdge = true; }, () => (input.interact = false)); bind('bSwap', () => switchTo(1 - P.cur));
+  bind('bFire', () => (input.fire = true), () => (input.fire = false)); bind('bReload', () => (input.reload = true)); bind('bUse', () => { input.interact = true; input.interactEdge = true; }, () => (input.interact = false)); bind('bSwap', () => switchTo(1 - P.cur)); bind('bLamp', () => setFlash(!P.flashlight));
 }
+function setFlash(on) { P.flashlight = on; spot.visible = on; beam.visible = !!on && tier > 0 && G.state === 'playing' && !P.dead; const b = $('bLamp'); if (b) b.classList.toggle('off', !on); sfx.click(0, on ? 1500 : 800, 0.32); }
 function toggleMute() { sfx.setMuted(!sfx.muted); try { localStorage.setItem('vwz_mute', sfx.muted ? '1' : '0'); } catch (e) {} syncMute(); }
 function syncMute() { $('btnMute').textContent = sfx.muted ? '🔇' : '🔊'; $('btnMute2').textContent = sfx.muted ? '🔇 Sound off' : '🔊 Sound on'; }
 $('btnMute').onclick = $('btnMute2').onclick = (e) => { e.stopPropagation(); toggleMute(); };
