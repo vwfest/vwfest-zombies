@@ -3,7 +3,7 @@ The co-op mode is not live. The server only runs locally (it binds to 127.0.0.1)
 
 ```bash
 cd server && npm i && npm test                         # unit + socket tests
-ALLOWED_ORIGINS=http://localhost:8099 npm start        # ws://127.0.0.1:8787
+DEV_HOOKS=1 ALLOWED_ORIGINS=http://localhost:8099 npm start        # ws://127.0.0.1:8787
 # repo root, second terminal:
 npm run build && python3 -m http.server 8099           # open http://localhost:8099 -> CO-OP: Quick match / Create room / Join CODE
 node test/coop-smoke.cjs                               # headless 2-client smoke test (CHROME=/usr/bin/google-chrome)
@@ -16,4 +16,11 @@ Point a client at another server with `?server=wss://host` or `localStorage.vwz_
 
 **Netcode:** 20 Hz server tick and snapshots. Clients render other players and zombies 100 ms in the past with interpolation, and predict their own movement with server correction past 2.5 m. On reconnect a token keeps your player for 30 s.
 
-**Not done yet:** server-side walls and line of sight, server-driven doors, planks, power-ups and crate, spectator camera while downed, and a production deployment (needs wss/TLS).
+## Shared world (implemented)
+Server map AABBs from all three client maps are in `server/maps.json`. Movement is swept against walls/fences and resolved with player radius; bullet rays stop at bullet colliders. Zombies respect solid colliders and the closed gate; once open, the gate routes them between lots.
+
+Gate purchases, distance-checked weapon stations/refills, shared window planks (zombies tear them, players repair), timed mystery crate rolls (buyer-only take), med kits, ammo, double points and nukes are server-decided and replicated. Ammo counts remain cosmetic client-side; shot fire rate and ownership are server enforced. Downed players spectate a living teammate, cycling every 6 seconds; clearing the round revives them.
+
+`DEV_HOOKS=1` enables explicit localhost smoke-test fixtures (teleports, health, points and drops). They are disabled by default and forcibly disabled with NODE_ENV=production. NEVER enable on a public server. The smoke test uses these to exercise interactions without relying on random spawns.
+
+Remaining: full navigation/pathfinding around clutter (zombies can get stuck), authoritative magazine/reload counts, latency/loss and real-device soak tests. Collision data is an exported snapshot; regenerate it if map geometry changes. No persistent rooms. A server restart discards matches.

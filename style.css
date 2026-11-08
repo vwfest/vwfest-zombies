@@ -180,3 +180,4 @@ body.nofs .fsbtn{display:none!important}
 .coMsg{min-height:16px;margin:4px 0 0;font-size:12px;color:var(--amb)}
 #mpTag{left:50%;top:10px;transform:translateX(-50%);padding:4px 12px;font-size:11px;letter-spacing:.2em;font-weight:800;color:var(--acc)}
 @media (max-height:500px){.coop{margin-top:6px;gap:6px}.coop input{padding:6px 8px;width:100px}.coop button{padding:6px 10px}}
+#specTag{left:50%;bottom:22%;transform:translateX(-50%);padding:8px 16px;font-size:13px;letter-spacing:.22em;font-weight:800;color:var(--red)}

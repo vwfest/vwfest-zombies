@@ -34,6 +34,6 @@ Never commit keystores. `android/.gitignore` already ignores them.
 11. **Production rollout:** start with a staged rollout (for example 20%).
 
 ## Known gaps
-- The server has no wall geometry, so shots can hit zombies behind fences.
-- In co-op the door, planks, power-ups and mystery crate are client-side and cosmetic.
+- Co-op wall/shot collision is now server-side; further navigation and latency soak testing is still needed.
+- Gate, planks, power-ups and mystery crate are now server-authoritative; magazine counts are still client-side.
 - A TWA needs Chrome (or another TWA-capable browser) on the device. Without one it falls back to a Custom Tab.

@@ -137,7 +137,6 @@ function setPrompt(html, ok = true) { const e = $('prompt'); if (html !== hud.pr
 function showGun() { for (const k in gunCache) gunCache[k].visible = false; const g = gunModel(cur().id); g.visible = G.state === 'playing' || P.dead; g.scale.setScalar(isTouch ? 0.78 : 0.9); g.add(flashSprite); flashSprite.position.copy(g.userData.muzzle.position).add(new THREE.Vector3(0, 0, -0.04)); P.gun = g; }
 function switchTo(i) { if (i === P.cur || !P.slots[i] || P.switchT > 0) return; P.cur = i; P.reloadT = 0; P.switchT = 0.32; showGun(); sfx.click(0, 2500, 0.3); }
 function giveWeapon(id) { // buy / crate: replace current if both slots used
-  if (MP?.on) MP.send({ t: 'buy', w: id });
   const have = P.slots.findIndex((s) => s && s.id === id); if (have >= 0) { const s = P.slots[have]; s.mag = WEAPONS[id].mag; s.reserve = WEAPONS[id].reserve; return; }
   if (!P.slots[1]) { P.slots[1] = slotOf(id); P.cur = 1; } else P.slots[P.cur] = slotOf(id);
   P.reloadT = 0; P.switchT = 0.4; showGun();
@@ -247,6 +246,7 @@ function findFocus() {
   return best;
 }
 function interact(f, held, dt) {
+  if (MP?.on) return mpInteract(f, held, dt);
   if (f.type === 'win') { if (held) { G.repairT += dt; if (G.repairT > 0.5) { G.repairT = 0; if (world.addPlank(f.w)) { sfx.repair(); P.pts += 10 * (G.double > 0 ? 2 : 1); popText('+10'); } } } return; }
   if (!input.interactEdge) return;
   if (f.type === 'buy') { const owned = P.slots.find((s) => s && s.id === f.b.id); const price = owned ? Math.floor(f.b.price / 2) : f.b.price; if (owned && owned.mag === WEAPONS[owned.id].mag && owned.reserve === WEAPONS[owned.id].reserve) { toast('Ammo already full'); return; } if (P.pts < price) { sfx.deny(); toast('Not enough points'); return; } P.pts -= price; sfx.cash(); giveWeapon(f.b.id); }
@@ -371,7 +371,7 @@ function tick(dt) {
   if (G.state === 'over') { fx.update(dt); return; }
   G.runTime += dt;
   if (P.dead) {
-    P.deadT += dt; if (MP?.on) MP.update(dt, t, cbs); else zombies.update(dt, t, P, world.door, { ...cbs, hitPlayer: () => {} }); world.update(dt, t, P); fx.update(dt); updateCamera(dt, t); if (P.deadT > 2.4 && !MP?.on) gameOver(); return;
+    P.deadT += dt; if (MP?.on) MP.update(dt, t, cbs); else zombies.update(dt, t, P, world.door, { ...cbs, hitPlayer: () => {} }); world.update(dt, t, P); fx.update(dt); updateCamera(dt, t); if (MP?.on && P.deadT > 0.8) { const who = MP.spectate(cam); gunRoot.visible = false; $('specTag').textContent = who ? 'DOWN · SPECTATING ' + who : 'DOWN · waiting for the round to end'; $('specTag').classList.remove('hidden'); } if (P.deadT > 2.4 && !MP?.on) gameOver(); return;
   }
   movePlayer(dt); updateWeapons(dt);
   // regen
@@ -386,7 +386,7 @@ function tick(dt) {
   motes.center = { x: P.x, z: P.z }; mist.center = motes.center; motes.ps.update(dt); mist.ps.update(dt); fx.update(dt); updateCrate(dt);
   // power-ups
   if (G.double > 0) G.double -= dt;
-  for (let i = G.ups.length - 1; i >= 0; i--) { const u = G.ups[i]; u.t -= dt; u.core.rotation.y += dt * 2.5; if (u.type !== 'health') u.core.rotation.x += dt * 1.1; u.g.position.y = 1.0 + Math.sin(t * 3 + i) * 0.15; u.g.visible = u.t > 5 || Math.sin(t * 16) > -0.2; if (Math.hypot(u.x - P.x, u.z - P.z) < 1.5) { pickPower(u); G.ups.splice(i, 1); } else if (u.t <= 0) { scene.remove(u.g); G.ups.splice(i, 1); } }
+  for (let i = G.ups.length - 1; i >= 0; i--) { const u = G.ups[i]; u.t -= dt; u.core.rotation.y += dt * 2.5; if (u.type !== 'health') u.core.rotation.x += dt * 1.1; u.g.position.y = 1.0 + Math.sin(t * 3 + i) * 0.15; u.g.visible = u.t > 5 || Math.sin(t * 16) > -0.2; if (MP?.on) continue; if (Math.hypot(u.x - P.x, u.z - P.z) < 1.5) { pickPower(u); G.ups.splice(i, 1); } else if (u.t <= 0) { scene.remove(u.g); G.ups.splice(i, 1); } }
   // interaction
   const f = findFocus(); updatePrompt(f); if (f) interact(f, input.interact, dt); else G.repairT = 0; input.interactEdge = false;
   updateCamera(dt, t); updateHUD();
@@ -462,6 +462,11 @@ requestAnimationFrame(frame);
 // test / debug hooks (harmless in production)
 // PWA offline cache (skipped on file:// and in tests)
 if ('serviceWorker' in navigator && location.protocol !== 'file:' && !qs.has('nosw')) navigator.serviceWorker.register('sw.js').catch(() => {});
+function mpInteract(f, held, dt) { // co-op: ask the server; it checks distance + points and replies with 'act' / snapshot changes
+  if (f.type === 'win') { if (held) { G.repairT += dt; if (G.repairT > 0.5) { G.repairT = 0; MP.send({ t: 'repair', w: f.w.id }); } } return; }
+  if (!input.interactEdge) return;
+  if (f.type === 'buy') MP.send({ t: 'buy', w: f.b.id }); else if (f.type === 'door') MP.send({ t: 'door' }); else if (f.type === 'crate') MP.send({ t: 'crate' });
+}
 /* ---------------- co-op (beta, local server only for now) ---------------- */
 const MP_URL = qs.get('server') || (() => { try { return localStorage.getItem('vwz_server'); } catch (e) { return null; } })() || 'ws://localhost:8787';
 MP = createMP({ scene, zombies, P, G, cam, world,
@@ -470,10 +475,22 @@ MP = createMP({ scene, zombies, P, G, cam, world,
   onRound: (n) => { G.round = n; G.phase = 'round'; sfx.round(n); banner('ROUND ' + n, 'Co-op · hold the yard together'); },
   onHurt: (d) => { P.lastHit = G.time; P.dmg = Math.max(P.dmg, 0.65 + 0.35 * (1 - Math.max(0, P.hp) / P.maxHp)); P.shake = 1; sfx.hurt(); },
   onDown: () => { die(); toast('You are down. Teammates revive you if they clear the round'); },
-  onRevive: () => { P.dead = false; P.deadT = 0; $('hud').classList.remove('hud-dead'); showGun(); toast('Back on your feet'); },
+  onRevive: () => { $('specTag').classList.add('hidden'); P.dead = false; P.deadT = 0; $('hud').classList.remove('hud-dead'); showGun(); toast('Back on your feet'); },
   onZDie: (z) => sfx.zdie(pan(z.pos), 0.5),
   onHits: (h) => { for (const x of h) { const hm = $('hitm'); hm.classList.remove('on', 'kill'); void hm.offsetWidth; hm.classList.add('on'); if (x.killed) { hm.classList.add('kill'); sfx.tick(true); G.kills++; if (x.head) P.heads++; } popText('+' + x.gain, x.head && x.killed); } },
-  onEvent: () => {},
+  onEvent: (e, mine) => {
+    if (e.e === 'pick') { const PWm = PW[e.type]; if (PWm) banner(PWm.name, e.p === MP.S.id ? PWm.sub : 'A teammate grabbed it'); sfx.power(e.type === 'health' ? 'ammo' : e.type);
+      if (e.type === 'ammo' && e.p === MP.S.id) for (const s of P.slots) if (s) { s.mag = WEAPONS[s.id].mag; s.reserve = WEAPONS[s.id].reserve; }
+      if (e.type === 'nuke') { sfx.boom(); P.shake = 1; $('fx-flash').style.transition = 'none'; $('fx-flash').style.opacity = 0.85; requestAnimationFrame(() => { $('fx-flash').style.transition = 'opacity 1.2s'; $('fx-flash').style.opacity = 0; }); } }
+    else if (e.e === 'plank' && e.by === MP.S.id) { G.mpRepairs = (G.mpRepairs || 0) + 1; sfx.repair(); popText('+10'); }
+    else if (e.e === 'crate' && e.s === 'shut') toast('The toolbox slammed shut'); },
+  onAct: (m) => { if (!m.ok) { if (m.why === 'pts') { sfx.deny(); toast('Not enough points'); } else if (m.why === 'not-yours') toast('That weapon belongs to a teammate'); return; }
+    if (m.a === 'buy') { sfx.cash(); giveWeapon(m.w); } else if (m.a === 'door') sfx.cash(); else if (m.a === 'crate') { sfx.cash(); if (m.s === 'roll') { sfx.open(); sfx.jingle(4); } else if (m.s === 'take') { giveWeapon(m.w); banner(WEAPONS[m.w].name.toUpperCase()); } } },
+  onPlank: (w, off) => { if (off) cbs.plank(w, true); },
+  onDoor: () => { sfx.door(); banner('GATE OPEN', 'The back lot awaits'); },
+  onCrate: (st, w, mine) => { const c = world.crate; if (st === 'idle') { if (c.state !== 'idle') closeCrate(); } else if (st === 'roll' && c.state === 'idle') { c.state = 'roll'; c.t = 0; c.pick = w; } else if (st === 'ready' && (c.state === 'idle' || (c.state === 'roll' && c.t < 3.4))) { c.state = 'roll'; c.t = 3.61; c.pick = w; } c.mine = mine; },
+  syncUps: (list) => { const ids = new Set(list.map((u) => u[0])); for (let i = G.ups.length - 1; i >= 0; i--) { const u = G.ups[i]; if (u.sid && !ids.has(u.sid)) { scene.remove(u.g); fx.glowBurst(new THREE.Vector3(u.x, 1, u.z), ...PW[u.type].col.map((v) => v * 0.7), 24, 4); G.ups.splice(i, 1); } }
+    for (const [id, type, x, z] of list) if (!G.ups.some((u) => u.sid === id)) { spawnPower(type, x, z); G.ups[G.ups.length - 1].sid = id; } },
   onOver: () => { setTimeout(() => { P.dead = true; gameOver(); MP.stop(); $('mpTag').classList.add('hidden'); }, 1500); },
   onQuit: () => toMenu() });
 const coName = () => ($('coName').value || 'Survivor').trim().slice(0, 16);
