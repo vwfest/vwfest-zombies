@@ -24,8 +24,12 @@ function prepBody(gltf, map, nrm) {
   const sk = ref.skeleton, hi = sk.bones.findIndex((b) => /^head$/i.test(b.name)); const pos = ref.geometry.attributes.position, si = ref.geometry.attributes.skinIndex, sw = ref.geometry.attributes.skinWeight;
   const v = new THREE.Vector3(); let nose = null, front = -1e9; let zc = 0, nz = 0;
   for (let i = 0; i < pos.count; i++) { let w = 0; for (let k = 0; k < 4; k++) if (si.getComponent(i, k) === hi) w = Math.max(w, sw.getComponent(i, k)); if (w < 0.5) continue; v.fromBufferAttribute(pos, i).applyMatrix4(ref.bindMatrix); zc += v.z; nz++; }
-  zc /= Math.max(1, nz); let sgn = 1;
-  for (let i = 0; i < pos.count; i++) { let w = 0; for (let k = 0; k < 4; k++) if (si.getComponent(i, k) === hi) w = Math.max(w, sw.getComponent(i, k)); if (w < 0.5) continue; v.fromBufferAttribute(pos, i).applyMatrix4(ref.bindMatrix); const y01 = (v.y - box.min.y) / H; if (y01 < 0.9 || y01 > 0.95) continue; const d = Math.abs(v.z - zc) - Math.abs(v.x) * 3; if (d > front) { front = d; nose = v.clone(); sgn = Math.sign(v.z - zc) || 1; } }
+  // Face = the side the head's vertex cloud leans toward (nose and lips add volume).
+  // Maximizing |z-zc| at crown height can pick the occiput, which flipped these
+  // Quaternius bodies 180° so they walked backwards relative to their yaw.
+  zc /= Math.max(1, nz); let sgn = Math.sign(zc) || 1;
+  for (let i = 0; i < pos.count; i++) { let w = 0; for (let k = 0; k < 4; k++) if (si.getComponent(i, k) === hi) w = Math.max(w, sw.getComponent(i, k)); if (w < 0.5) continue; v.fromBufferAttribute(pos, i).applyMatrix4(ref.bindMatrix); const y01 = (v.y - box.min.y) / H; if (y01 < 0.86 || y01 > 0.93) continue; const d = sgn * (v.z - zc) - Math.abs(v.x) * 3; if (d > front) { front = d; nose = v.clone(); } }
+  if (!nose) nose = new THREE.Vector3(0, box.min.y + 0.9 * H, zc + sgn * 0.08);
   const k = H / 1.8, inv = sk.boneInverses[hi];
   const eye = (x) => new THREE.Vector3(x * k, nose.y + 0.035 * k, nose.z - sgn * 0.028 * k).applyMatrix4(inv);
   return { scene, H, box, front: sgn, eyes: nose ? { L: eye(-0.033), R: eye(0.033) } : null, map, nrm, nLods: lods.length };
