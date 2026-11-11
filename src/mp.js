@@ -13,7 +13,8 @@ export function createMP(ctx) {
     const gun = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.5), new THREE.MeshStandardMaterial({ color: 0x222 })); gun.position.set(0.25, 1.35, -0.3);
     const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64; const c2 = cv.getContext('2d'); c2.font = '800 34px system-ui,sans-serif'; c2.textAlign = 'center'; c2.fillStyle = '#' + COLS[i % 4].toString(16).padStart(6, '0'); c2.fillText(name, 128, 44);
     const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false })); tag.scale.set(1.2, 0.3, 1); tag.position.y = 2.2;
-    g.add(body, head, gun, tag); g.userData = { body, gun, name }; scene.add(g); return g; }
+    const talk = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: 0x18ffb0 })); talk.position.y = 2.45; talk.visible = false;
+    g.add(body, head, gun, tag, talk); g.userData = { body, gun, name, talk }; scene.add(g); return g; }
   function connect(opts) { S.url = opts.url; S.name = opts.name || S.name; S.joinMsg = opts.join; open(); }
   function open() { let ws; try { ws = new WebSocket(S.url); } catch (e) { return fail('bad server url'); } S.ws = ws; S.status = 'connecting';
     ws.onopen = () => { S.retry = 0; ws.send(JSON.stringify(S.token ? { t: 'join', token: S.token } : { t: 'join', name: S.name, ...S.joinMsg })); };
@@ -28,6 +29,7 @@ export function createMP(ctx) {
     else if (m.t === 's') { m.recv = performance.now(); S.snaps.push(m); if (S.snaps.length > 30) S.snaps.shift(); for (const e of m.ev || []) ctx.onEvent?.(e, e.p === S.id || e.by === S.id); if (m.over && !S.over) { S.over = true; ctx.onOver?.(m); } }
     else if (m.t === 'hits') ctx.onHits?.(m.h);
     else if (m.t === 'act') { S.lastAct = m; ctx.onAct?.(m); }
+    else if (m.t === 'sig') ctx.onSig?.(m);
   }
   function send(o) { if (S.ws && S.ws.readyState === 1) S.ws.send(JSON.stringify(o)); }
   function stop() { S.on = false; if (S.ws) { try { send({ t: 'leave' }); S.ws.close(); } catch (e) {} } S.ws = null; S.token = null; S.snaps = []; for (const g of S.remotes.values()) scene.remove(g); S.remotes.clear(); S.slot.clear(); zombies.reset(); }
@@ -41,7 +43,9 @@ export function createMP(ctx) {
     if (last.round !== G.round && last.round > 0) ctx.onRound?.(last.round); G.mpPhase = last.phase;
     // shared world state: planks, gate, crate, power-ups, double points
     const W = ctx.world; if (last.win) last.win.forEach((n, i) => { const w = W.windows[i]; if (!w) return; while (w.count > n) { W.removePlank(w); ctx.onPlank?.(w, true); } while (w.count < n) { W.addPlank(w); ctx.onPlank?.(w, false); } });
-    if (last.door && !W.door.open) { W.door.open = true; ctx.onDoor?.(); }
+    const openIds = new Set(last.go || []); if (last.door) openIds.add('AB');
+    for (const d of (W.doors || [W.door])) if (d && openIds.has(d.id) && !d.open) { d.open = true; ctx.onDoor?.(d); }
+    if (last.ms !== undefined) ctx.onMission?.(last.ms, last.mi, last.mc);
     if (last.crate) ctx.onCrate?.(last.crate[0], last.crate[1], last.crate[2] === S.id);
     if (last.up) ctx.syncUps?.(last.up); G.double = last.dbl ? 1 : 0; if (me) S.owned = me[11];
     // remote players
@@ -63,5 +67,6 @@ export function createMP(ctx) {
   const _v = new THREE.Vector3();
   function spectate(cam) { const alive = [...S.remotes.values()].filter((g) => g.position.y < 0.1 && g.visible); if (!alive.length) return null; const i = Math.floor(performance.now() / 6000) % alive.length, g = alive[i];
     const yaw = g.rotation.y, bx = g.position.x + Math.sin(yaw) * 3.4, bz = g.position.z + Math.cos(yaw) * 3.4; _v.set(bx, 2.6, bz); cam.position.lerp(_v, 0.2); cam.lookAt(g.position.x, 1.4, g.position.z); return g.userData.name; }
-  return { S, spectate, connect, stop, update, send, get on() { return S.on; } };
+  function setTalking(id, on) { const g = S.remotes.get(id); if (g && g.userData.talk) g.userData.talk.visible = !!on; }
+  return { S, spectate, connect, stop, update, send, setTalking, get on() { return S.on; } };
 }

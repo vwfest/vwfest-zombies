@@ -1,0 +1,28 @@
+{
+  "discount": 0.5,
+  "pickup": 1.35,
+  "deliver": 1.9,
+  "board": 1.7,
+  "radio": 3.6,
+  "decay": 0.5,
+  "lots": {
+    "C": { "x0": 24, "x1": 50.4, "z0": 2, "z1": 22 },
+    "D": { "x0": -50.4, "x1": -24, "z0": -34, "z1": -2 },
+    "E": { "x0": 4, "x1": 24.4, "z0": -76.4, "z1": -52 }
+  },
+  "gates": [
+    { "id": "AB", "price": 1250, "name": "Back lot", "blurb": "The back lot awaits", "areas": ["A", "B"], "x": 0, "z": -24, "w": 6, "axis": "x", "stand": { "A": { "x": 0, "z": -22.2 }, "B": { "x": 0, "z": -25.8 } } },
+    { "id": "AC", "price": 1500, "name": "Lot C", "blurb": "Fuel yard open", "areas": ["A", "C"], "x": 24, "z": 12, "w": 5, "axis": "z", "stand": { "A": { "x": 22.2, "z": 12 }, "C": { "x": 25.8, "z": 12 } } },
+    { "id": "AD", "price": 1750, "name": "Lot D", "blurb": "Bus barn open", "areas": ["A", "D"], "x": -24, "z": -14, "w": 5, "axis": "z", "stand": { "A": { "x": -22.2, "z": -14 }, "D": { "x": -25.8, "z": -14 } } },
+    { "id": "SD", "price": 900, "name": "Side access", "blurb": "Side gate open", "areas": ["B", "D"], "x": -24, "z": -30, "w": 4.2, "axis": "z", "stand": { "B": { "x": -22.2, "z": -30 }, "D": { "x": -25.8, "z": -30 } } },
+    { "id": "BE", "price": 2000, "name": "Lot E", "blurb": "Radio yard open", "areas": ["B", "E"], "x": 12, "z": -52, "w": 5, "axis": "x", "stand": { "B": { "x": 12, "z": -50.2 }, "E": { "x": 12, "z": -53.8 } } }
+  ],
+  "jobs": [
+    { "id": "fuel", "title": "Fuel Run", "kind": "carry", "gate": "AC", "area": "A", "need": 3, "pts": 400, "power": "double", "pad": { "x": 19.2, "z": 12 }, "items": [{ "id": "f0", "x": 15, "z": 19 }, { "id": "f1", "x": -16, "z": 18 }, { "id": "f2", "x": 6, "z": 4 }] },
+    { "id": "bus", "title": "Board the Bus", "kind": "board", "gate": "AD", "area": "A", "need": 4, "pts": 500, "power": "ammo", "pad": { "x": -15, "z": 4.2 }, "items": [{ "id": "b0", "x": -16.45, "z": 0.2 }, { "id": "b1", "x": -16.45, "z": 2.1 }, { "id": "b2", "x": -13.55, "z": 0.2 }, { "id": "b3", "x": -13.55, "z": 2.1 }] },
+    { "id": "carb", "title": "Carb Hunt", "kind": "carry", "gate": "SD", "area": "B", "need": 1, "pts": 350, "power": "double", "pad": { "x": -18.2, "z": -30 }, "items": [{ "id": "carb", "x": -6, "z": 20 }] },
+    { "id": "radio", "title": "Radio Hold", "kind": "radio", "gate": "BE", "area": "B", "need": 20, "pts": 600, "power": "ammo", "pad": { "x": 8, "z": -42 }, "items": [] },
+    { "id": "parts", "title": "Part Collection", "kind": "carry", "gate": "", "area": "C", "need": 3, "pts": 450, "power": "double", "pad": { "x": 40, "z": 5.5 }, "items": [{ "id": "p0", "x": 32, "z": 18 }, { "id": "p1", "x": 46, "z": 16 }, { "id": "p2", "x": 36, "z": 9 }] },
+    { "id": "clear", "title": "Clear Lot D", "kind": "clear", "gate": "", "area": "D", "need": 8, "pts": 500, "power": "ammo", "pad": { "x": -37, "z": -18 }, "items": [] }
+  ]
+}
