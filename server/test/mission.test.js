@@ -5,6 +5,8 @@ const walk = (r, id, x, z, t0 = 1000) => { const p = r.players.get(id); let t = 
 
 test('junkyard objectives start on fuel and do not open side lots', () => {
   const r = new Room('M'); const p = r.addPlayer('a'); r.step(0.05);
+  assert.equal(r.missions.job, null);
+  assert.equal(r.missions.onWave(1), true);
   assert.equal(r.missions.job.id, 'fuel');
   assert.equal(r.missions.price(r.door), 1250);
   assert.equal(r.missions.price(r.doors.find((d) => d.id === 'AC')), 750);
@@ -15,7 +17,7 @@ test('junkyard objectives start on fuel and do not open side lots', () => {
 });
 
 test('fuel run is shared, distance-checked, and opens lot C for free', () => {
-  const r = new Room('M'); const a = r.addPlayer('a'), b = r.addPlayer('b'); r.phase = 'round'; r.step(0.05);
+  const r = new Room('M'); const a = r.addPlayer('a'), b = r.addPlayer('b'); r.phase = 'round'; r.missions.onWave(1); r.step(0.05);
   assert.equal(r.missions.use('a', 1000).why, 'empty');
   const cans = r.missions.job.items.map((c) => ({ x: c.x, z: c.z }));
   at(a, cans[0].x, cans[0].z); r.missions.step(0.05); assert.equal(r.missions.job.carry.a, 'f0');
@@ -26,14 +28,14 @@ test('fuel run is shared, distance-checked, and opens lot C for free', () => {
   at(a, cans[2].x, cans[2].z); r.missions.step(0.05); at(a, 19.2, 12); assert.equal(r.missions.use('a', 4000).ok, true);
   assert.equal(r.doors.find((d) => d.id === 'AC').open, true);
   assert.ok(a.pts >= 500);
-  assert.equal(r.missions.job.id, 'bus');
+  assert.equal(r.missions.job, null);
   assert.ok(r.activeWins().some((w) => w.area === 'C'));
   assert.equal(r.activeWins().some((w) => w.area === 'D'), false);
-  const snap = r.snapshot(); assert.equal(snap.ms[0], 'bus'); assert.ok(snap.go.includes('AC'));
+  const snap = r.snapshot(); assert.equal(snap.ms, null); assert.ok(snap.go.includes('AC'));
 });
 
 test('buying lot C while fuel is active is half price and still a fallback', () => {
-  const r = new Room('M'); const p = r.addPlayer('a'); r.step(0.05); at(p, 22.2, 12); p.pts = 800;
+  const r = new Room('M'); const p = r.addPlayer('a'); r.missions.onWave(1); at(p, 22.2, 12); p.pts = 800;
   const res = r.openDoor('a', 'AC'); assert.equal(res.ok, true); assert.equal(res.price, 750); assert.equal(p.pts, 50);
   assert.equal(r.openDoor('a', 'AC').ok, false);
   assert.ok(r.activeWins().some((w) => w.area === 'C'));
@@ -47,9 +49,9 @@ test('boarding the bus is shared and opens lot D', () => {
   at(a, spots[2][0], spots[2][1]); assert.equal(r.missions.use('a', 2000).ok, true);
   at(b, spots[3][0], spots[3][1]); assert.equal(r.missions.use('b', 2100).ok, true);
   assert.equal(r.doors.find((d) => d.id === 'AD').open, true);
-  assert.equal(r.missions.job.id, 'carb');
+  assert.equal(r.missions.job, null);
   assert.ok(r.activeWins().some((w) => w.area === 'D'));
-  assert.equal(r.snapshot().ms[1], 0);
+  assert.equal(r.snapshot().ms, null);
 });
 
 test('carb hunt opens the side access and radio hold only counts inside the pad', () => {
@@ -57,6 +59,8 @@ test('carb hunt opens the side access and radio hold only counts inside the pad'
   at(p, -6, 20); r.missions.step(0.05); assert.equal(r.missions.job.carry.a, 'carb');
   at(p, -18.2, -30); assert.equal(r.missions.use('a', 1000).ok, true);
   assert.equal(r.doors.find((d) => d.id === 'SD').open, true);
+  assert.equal(r.missions.job, null);
+  r.missions.begin(3);
   assert.equal(r.missions.job.id, 'radio');
   at(p, 0, 12); for (let i = 0; i < 20; i++) r.missions.step(0.05); assert.equal(r.missions.job.have, 0);
   at(p, 8, -42); for (let i = 0; i < 40; i++) r.missions.step(0.05); const mid = r.missions.job.have; assert.ok(mid > 1.5 && mid < 2.5);
@@ -70,6 +74,8 @@ test('part collection does not open a gate and clear lot only counts lot D', () 
   const r = new Room('M'); const p = r.addPlayer('a'); r.phase = 'round'; r.missions.begin(4);
   assert.equal(r.missions.job.id, 'parts');
   for (const it of [...r.missions.job.items]) { at(p, it.x, it.z); r.missions.step(0.05); at(p, 40, 5.5); assert.equal(r.missions.use('a', 1000).ok, true); }
+  assert.equal(r.missions.job, null);
+  r.missions.begin(5);
   assert.equal(r.missions.job.id, 'clear');
   assert.equal(r.doors.filter((d) => d.open).length, 0);
   r.missions.onKill({ x: 0, z: 10 }); assert.equal(r.missions.job.have, 0);

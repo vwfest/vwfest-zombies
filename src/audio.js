@@ -32,7 +32,7 @@ export class Sound {
   }
   shot(kind) {
     if (!this.ok) return; const c = this.ctx, t = c.currentTime, o = this.out(0, kind === 'shotgun' || kind === 'lmg' ? 0.5 : 0.3);
-    const P = { pistol: [0.13, 2600, 0.7, 150, 0.9, 0.55], smg: [0.09, 3400, 0.5, 190, 0.7, 0.45], shotgun: [0.34, 1800, 1.0, 85, 1.2, 0.9], rifle: [0.16, 2200, 0.8, 120, 1.0, 0.7], lmg: [0.2, 1900, 0.9, 95, 1.2, 0.8] }[kind] || [0.12, 2500, 0.7, 150, 1, 0.6];
+    const P = { pistol: [0.13, 2600, 0.7, 150, 0.9, 0.55], akimbo: [0.1, 2800, 0.55, 170, 0.75, 0.45], smg: [0.09, 3400, 0.5, 190, 0.7, 0.45], shotgun: [0.34, 1800, 1.0, 85, 1.2, 0.9], sawed: [0.28, 1500, 1.1, 70, 1.3, 1], rifle: [0.16, 2200, 0.8, 120, 1.0, 0.7], lever: [0.2, 1800, 0.75, 110, 1.15, 0.7], nailer: [0.045, 4200, 0.28, 240, 0.25, 0.2], lmg: [0.2, 1900, 0.9, 95, 1.2, 0.8] }[kind] || [0.12, 2500, 0.7, 150, 1, 0.6];
     this.nz(t, P[0], 'lowpass', P[1], 220, P[2], o, 0.7); this.nz(t, 0.025, 'highpass', 3000, 6000, 0.6, o); this.tone(t, P[0] * 1.2, 'sine', P[3], P[3] * 0.3, P[4] * 0.9, o);
     this.tone(t, 0.05, 'square', P[3] * 4, P[3] * 1.5, 0.15, o);
   }
@@ -80,7 +80,85 @@ export class Sound {
     const s = c.createBufferSource(); s.buffer = this.noise; s.loop = true; const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.8; bp.frequency.value = 380; const g = c.createGain(); g.gain.value = 0.07;
     const lfo = c.createOscillator(); lfo.frequency.value = 0.11; const lg = c.createGain(); lg.gain.value = 0.045; lfo.connect(lg); lg.connect(g.gain); const lfo2 = c.createOscillator(); lfo2.frequency.value = 0.07; const lg2 = c.createGain(); lg2.gain.value = 140; lfo2.connect(lg2); lg2.connect(bp.frequency);
     s.connect(bp); bp.connect(g); g.connect(o); s.start(); lfo.start(); lfo2.start();
-    const dr = c.createOscillator(); dr.type = 'sawtooth'; dr.frequency.value = 36; const dl = c.createBiquadFilter(); dl.type = 'lowpass'; dl.frequency.value = 90; const dg = c.createGain(); dg.gain.value = 0.07; dr.connect(dl); dl.connect(dg); dg.connect(o); dr.start();
-    const cr = c.createOscillator(); cr.type = 'sine'; cr.frequency.value = 4300; const cg = c.createGain(); cg.gain.value = 0; const cl = c.createOscillator(); cl.type = 'square'; cl.frequency.value = 28; const clg = c.createGain(); clg.gain.value = 0.004; cl.connect(clg); clg.connect(cg.gain); const cl2 = c.createOscillator(); cl2.frequency.value = 0.3; const cl2g = c.createGain(); cl2g.gain.value = 0.003; cl2.connect(cl2g); cl2g.connect(cg.gain); cr.connect(cg); cg.connect(o); cr.start(); cl.start(); cl2.start();
+    const dr = c.createOscillator(); dr.type = 'sawtooth'; dr.frequency.value = 36; const dl = c.createBiquadFilter(); dl.type = 'lowpass'; dl.frequency.value = 90; const dg = c.createGain(); dg.gain.value = 0.04; dr.connect(dl); dl.connect(dg); dg.connect(o); dr.start();
+    const cr = c.createOscillator(); cr.type = 'sine'; cr.frequency.value = 4300; const cg = c.createGain(); cg.gain.value = 0; const cl = c.createOscillator(); cl.type = 'square'; cl.frequency.value = 28; const clg = c.createGain(); clg.gain.value = 0.003; cl.connect(clg); clg.connect(cg.gain); const cl2 = c.createOscillator(); cl2.frequency.value = 0.3; const cl2g = c.createGain(); cl2g.gain.value = 0.002; cl2.connect(cl2g); cl2g.connect(cg.gain); cr.connect(cg); cg.connect(o); cr.start(); cl.start(); cl2.start();
+  }
+  beep(left = 3) { if (!this.ok) return; const t = this.ctx.currentTime, o = this.out(0, 0), f = left < 1.2 ? 1480 : 860; this.tone(t, 0.04, 'square', f, f, left < 1.2 ? 0.1 : 0.05, o); }
+  // Gameplay bed: surf-punk, scheduled a few beats ahead. Lives on the game context, never the voice graph.
+  ensureMusic() {
+    if (!this.ctx || this.musicBus) return;
+    const c = this.ctx; this.musicBus = c.createGain(); this.musicBus.gain.value = 0.16; this.musicBus.connect(this.master);
+    this.musicFilter = c.createBiquadFilter(); this.musicFilter.type = 'lowpass'; this.musicFilter.frequency.value = 1800; this.musicFilter.connect(this.musicBus);
+    this.musicOn = true; this.musicPlaying = false; this.musicMood = 'calm'; this.musicLow = false; this._nextMus = 0; this._duckUntil = 0;
+  }
+  setMusicDetail(low) { this.musicLow = !!low; }
+  setMusicOn(on) { this.musicOn = !!on; if (this.musicBus) this.musicBus.gain.setTargetAtTime(this.musicOn ? 0.16 : 0, this.ctx.currentTime, 0.05); }
+  musicStart() { this.init(); this.ensureMusic(); this.musicPlaying = true; this._nextMus = 0; }
+  musicStop() { this.musicPlaying = false; this._nextMus = 0; }
+  setMusicPhase(mood) { this.musicMood = mood === 'hot' || mood === 'round' ? 'hot' : 'calm'; if (this.musicFilter) this.musicFilter.frequency.setTargetAtTime(this.musicMood === 'hot' ? (this.musicLow ? 1400 : 2400) : 900, this.ctx.currentTime, 0.4); }
+  pumpMusic() {
+    if (!this.ctx || !this.musicPlaying || !this.musicOn || this.muted || this.ctx.state !== 'running') return;
+    this.ensureMusic(); const c = this.ctx, t = c.currentTime, horizon = t + 0.22;
+    if (!this._nextMus || this._nextMus < t - 0.05) this._nextMus = t + 0.05;
+    const bpm = this.musicMood === 'hot' ? 146 : 112, beat = 60 / bpm;
+    const ducked = t < (this._duckUntil || 0);
+    if (ducked) this.musicBus.gain.setTargetAtTime(0.045, t, 0.05); else if (this.musicOn) this.musicBus.gain.setTargetAtTime(this.musicMood === 'hot' ? 0.18 : 0.11, t, 0.2);
+    while (this._nextMus < horizon) { this.scheduleBeat(this._nextMus, beat); this._nextMus += beat; }
+  }
+  scheduleBeat(t, beat) {
+    const step = Math.round((this._step = (this._step || 0) + 1));
+    const hot = this.musicMood === 'hot', low = this.musicLow;
+    const dest = this.musicFilter, kick = step % 2 === 1, snare = step % 4 === 2;
+    if (kick) this.tone(t, 0.09, 'sine', hot ? 78 : 62, 42, hot ? 0.55 : 0.32, dest, 0.004);
+    if (snare && !low) this.nz(t, 0.08, 'highpass', 1800, 2400, hot ? 0.16 : 0.08, dest);
+    else if (snare) this.tone(t, 0.06, 'triangle', 220, 140, 0.12, dest);
+    if (!low && hot && step % 2 === 0) this.nz(t + beat * 0.5, 0.03, 'highpass', 5000, 7000, 0.05, dest);
+    const bass = [82.4, 82.4, 123.5, 98][step % 4];
+    this.tone(t, beat * 0.85, 'square', bass, bass, hot ? 0.11 : 0.07, dest, 0.01);
+    if (!low && step % (hot ? 2 : 4) === 0) { const lead = [329.6, 415.3, 440, 493.9, 369.9][step % 5]; this.tone(t, beat * 0.4, 'sawtooth', lead, lead, hot ? 0.045 : 0.02, dest, 0.005); }
+  }
+  duck(sec) { if (!this.ctx) return; this._duckUntil = this.ctx.currentTime + sec; }
+  lineFor(kind, id, n) {
+    const waves = ['Wave one. The yard is waking.', 'Wave two. They heard the metal.', 'Wave three. Do not blink.', 'Wave four. The fence is tired.', 'Wave five. They smell you.'];
+    const extra = ['The yard remembers.', 'More of them. Always more.', 'Keep the lights on.'];
+    const open = { fuel: ['The cans are bleeding. Bring them in.', 'Fuel the generator. They hate the light.'], bus: ['Board the bus. It still knows the road.', 'Four windows, then the barn.'], carb: ['Something in the back lot is missing a heart.', 'Find the carburetor. It is still warm.'], radio: ['Hold the signal. They hunt the quiet.', 'Stay on the mast.'], parts: ['The side yard wants its pieces back.', 'Scrap. Three pieces. Do not linger.'], clear: ['Lot D is full of them. Empty it.', 'Clear the barn. Leave none standing.'] };
+    const done = { fuel: 'The generator drinks. They smelled it.', bus: 'The bus is boarded. They know.', carb: 'The heart is back in the engine.', radio: 'The signal held. Something answered.', parts: 'The yard has its pieces.', clear: 'Lot D is quiet. For now.' };
+    if (kind === 'wave') return n >= 1 && n <= 5 ? waves[n - 1] : extra[(n || 0) % extra.length];
+    if (kind === 'done') return done[id] || 'The yard remembers.';
+    const arr = open[id] || extra; return arr[(n || 0) % arr.length];
+  }
+  announce(text) {
+    if (!text) return; this._aq = this._aq || []; this._aq.push(String(text)); if (!this._ab) this._drainAnn();
+  }
+  _drainAnn() {
+    const line = (this._aq || []).shift(); if (!line) { this._ab = false; return; } this._ab = true;
+    const dur = Math.min(3.4, 0.6 + line.length * 0.04); this.duck(dur + 0.2);
+    if (this.ctx && !this.muted && this.ctx.state === 'running') this.growl(dur);
+    if (!this.muted && typeof speechSynthesis !== 'undefined') {
+      try { const u = new SpeechSynthesisUtterance(line); u.rate = 0.76; u.pitch = 0.42; u.volume = 0.8; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch (e) {}
+    }
+    setTimeout(() => this._drainAnn(), dur * 1000 + 160);
+  }
+  growl(dur) {
+    if (!this.ok) return; const t = this.ctx.currentTime, o = this.out(0, 0.55);
+    const sh = this.ctx.createWaveShaper(), curve = new Float32Array(64);
+    for (let i = 0; i < 64; i++) { const x = (i / 63) * 2 - 1; curve[i] = Math.tanh(x * 4); }
+    sh.curve = curve; const bp = this.ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 6; bp.frequency.setValueAtTime(180, t); bp.frequency.linearRampToValueAtTime(420, t + dur * 0.45); bp.frequency.linearRampToValueAtTime(140, t + dur);
+    this.tone(t, dur, 'sawtooth', 70, 48, 0.22, sh); sh.connect(bp); bp.connect(o);
+    this.nz(t, dur * 0.8, 'bandpass', 500, 220, 0.08, o, 3);
+  }
+  async renderSample(seconds = 5) {
+    const rate = 22050, ctx = new OfflineAudioContext(1, Math.floor(rate * seconds), rate);
+    const bus = ctx.createGain(); bus.gain.value = 0.2; const filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 2200; filter.connect(bus); bus.connect(ctx.destination);
+    const beat = 60 / 146; let t = 0.05, step = 0;
+    const tone = (t0, dur, type, f0, g0) => { const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f0, t0); const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(g0, t0 + 0.008); g.gain.exponentialRampToValueAtTime(0.0008, t0 + dur); o.connect(g); g.connect(filter); o.start(t0); o.stop(t0 + dur + 0.02); };
+    while (t < seconds - 0.1) { step++; if (step % 2 === 1) tone(t, 0.08, 'sine', 78, 0.5); if (step % 4 === 2) tone(t, 0.05, 'triangle', 220, 0.12); tone(t, beat * 0.8, 'square', [82.4, 82.4, 123.5, 98][step % 4], 0.1); if (step % 2 === 0) tone(t, beat * 0.35, 'sawtooth', [329.6, 415.3, 440, 493.9, 369.9][step % 5], 0.04); t += beat; }
+    const buf = await ctx.startRendering(), ch = buf.getChannelData(0);
+    const n = ch.length, ab = new ArrayBuffer(44 + n * 2), v = new DataView(ab);
+    const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) { const s = Math.max(-1, Math.min(1, ch[i])); v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true); }
+    let bin = ''; const bytes = new Uint8Array(ab); for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
   }
 }

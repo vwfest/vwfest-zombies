@@ -59,4 +59,33 @@ function route(from, to, doors) {
   return gates;
 }
 
-module.exports = { yard, areaOf, activeAreas, standOf, route, DOOR_Z };
+// Steer a chaser through the open gate that joins `here` to `destArea`.
+// The old stand points sit 1.8m short of the opening and the "through" test was 1.65m,
+// so a horde would mill on the near stand and never enter the gap. This aims at the
+// mouth, then commits to a point past the plane, with a lane offset that stays inside
+// the gap after the body radius.
+function portalTarget(x, z, mapId, destArea, doors, lane = 0) {
+  const here = areaOf(x, z, mapId);
+  if (!destArea || here === destArea) return null;
+  const path = route(here, destArea, doors);
+  if (!path || !path.length) return null;
+  const g = path[0];
+  const next = g.areas[0] === here ? g.areas[1] : g.areas[0];
+  const crossZ = g.axis !== 'z';
+  const a = standOf(g, here), b = standOf(g, next);
+  const sign = crossZ ? (Math.sign(b.z - a.z) || -1) : (Math.sign(b.x - a.x) || 1);
+  const pos = crossZ ? z : x, plane = crossZ ? g.z : g.x;
+  const progress = (pos - plane) * sign;
+  const half = Math.max(0.25, (g.w || 6) / 2 - 1.05);
+  const lat = Math.max(-half, Math.min(half, lane || 0));
+  // One target, past the plane. A nearer "mouth" waypoint is a place they can stop on,
+  // and the old 1.8m stand never reached the opening at all.
+  const exitAlong = plane + sign * 1.55;
+  return {
+    x: crossZ ? g.x + lat : exitAlong, z: crossZ ? exitAlong : g.z + lat,
+    ex: crossZ ? g.x : exitAlong, ez: crossZ ? exitAlong : g.z,
+    gate: g.id, next, progress, crossZ, gx: g.x, gz: g.z,
+  };
+}
+
+module.exports = { yard, areaOf, activeAreas, standOf, route, portalTarget, DOOR_Z };
