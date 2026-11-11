@@ -162,7 +162,7 @@ body.nofs .fsbtn{display:none!important}
 @media (max-height:500px){
   body.touch #roundBox{left:calc(env(safe-area-inset-left) + 10px);top:8px;padding:4px 10px 3px;min-width:64px}body.touch #roundNum{font-size:30px}body.touch #roundBox .lbl{font-size:9px}
   body.touch #statL{top:8px;left:calc(env(safe-area-inset-left) + 86px);width:170px;padding:5px 10px}body.touch #statL .hp .bar{height:6px}body.touch #pts{font-size:18px}body.touch #medCue{display:none}
-  body.touch #statR{top:8px;right:calc(env(safe-area-inset-right) + 162px);transform:scale(.66)}
+  body.touch #statR{top:54px;right:calc(env(safe-area-inset-right) + 8px);transform:scale(.62)}
   body.touch #topRight{top:8px;right:calc(env(safe-area-inset-right) + 8px)}
   body.touch #minimap{top:62px;left:calc(env(safe-area-inset-left) + 10px);width:70px;height:70px}
   body.touch #stick{left:calc(env(safe-area-inset-left) + 18px);bottom:calc(env(safe-area-inset-bottom) + 18px);width:118px;height:118px}

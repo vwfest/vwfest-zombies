@@ -45,6 +45,10 @@ export class World {
   box(w, h, d, x, y, z, mat, o = {}) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.castShadow = o.cast !== false; m.receiveShadow = true; (o.dynamic ? this.root : this.staticGroup).add(m); return m; }
   place(obj, x, z, rotY = 0, collide = true) {
     obj.position.x += x; obj.position.z += z; obj.rotation.y = rotY; obj.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } }); this.staticGroup.add(obj);
+    const hd = obj.userData.hd; if (hd) { // remember where HD props go; the procedural stand-ins are batched separately so they can be hidden
+      obj.updateMatrix(); obj.traverse((m) => { if (m.isMesh) m.userData.hdProp = true; });
+      const items = hd.kind === 'tyre' ? obj.children.map((c) => new THREE.Matrix4().makeTranslation(c.position.x, c.position.y, c.position.z).premultiply(obj.matrix).multiply(new THREE.Matrix4().makeRotationY(rnd(TAU)))) : [obj.matrix.clone()];
+      for (const m of items) (this.hdProps || (this.hdProps = [])).push({ ...hd, m }); }
     if (collide && obj.userData.size) { let [w, h, d] = obj.userData.size; if (Math.abs(Math.sin(rotY)) > 0.7) [w, d] = [d, w]; this.addCol(x - w / 2 + 0.05, x + w / 2 - 0.05, z - d / 2 + 0.05, z + d / 2 - 0.05, h); }
     return obj;
   }
@@ -242,7 +246,7 @@ export class World {
     this.addCol(15.85, 16.15, -62.15, -61.85, 6.4);
     const mark = (id, x, z, mesh) => { mesh.position.set(x, 0, z); mesh.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } }); this.root.add(mesh); this.missionMeshes.set(id, mesh); };
     const can = () => { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.42, 8), M.paint(0xb23a2e))); g.children[0].position.y = 0.22; const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.12, 6), M.fenceDark); cap.position.y = 0.46; g.add(cap); return g; };
-    for (const it of job('fuel').items) mark(it.id, it.x, it.z, can());
+    for (const it of job('fuel').items) { const c = can(); c.userData.hdKind = 'jerry'; mark(it.id, it.x, it.z, c); }
     const carbM = new THREE.Group(); carbM.add(new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.16, 0.2), M.chrome)); carbM.children[0].position.y = 0.2; const horn = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.08, 0.22, 6), M.paint(0xd2a13a)); horn.position.set(0, 0.28, 0); carbM.add(horn);
     mark('carb', job('carb').items[0].x, job('carb').items[0].z, carbM);
     for (const it of job('parts').items) { const g = new THREE.Group(); const m = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.05, 6, 10), M.chrome); m.rotation.x = Math.PI / 2; m.position.y = 0.12; g.add(m); mark(it.id, it.x, it.z, g); }
@@ -318,7 +322,7 @@ export class World {
     // dunes + rocks + cacti + distant mesas (non-colliding, outside the fences)
     const inside = (x, z) => (x > -26 && x < 26 && z > -54 && z < 26) || (x > 22 && x < 52 && z > 0 && z < 24) || (x < -22 && x > -52 && z > -36 && z < 0) || (x > 2 && x < 26 && z < -50 && z > -78);
     // dunes: textured sand (own repeat), lumpy smooth-shaded mound instead of a flat-shaded 12x6 ellipsoid
-    const dm = M.sand.clone(); dm.map = M.sand.map.clone(); dm.map.repeat.set(6, 3); dm.bumpMap = M.sand.bumpMap.clone(); dm.bumpMap.repeat.set(6, 3); dm.color = new THREE.Color(0xb7a184); dm.bumpScale = 1.5;
+    const dm = M.sand.clone(); dm.map = M.sand.map.clone(); dm.map.repeat.set(6, 3); dm.bumpMap = M.sand.bumpMap.clone(); dm.bumpMap.repeat.set(6, 3); dm.color = new THREE.Color(0xb7a184); dm.bumpScale = 1.5; M.dune = dm;
     let dg; const duneGeo = () => dg || (dg = (() => { const g = new THREE.SphereGeometry(1, 40, 14, 0, TAU, 0, Math.PI / 2), p = g.attributes.position;
       for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(z, x); const h = y * (0.75 + 0.25 * Math.sin(a * 3 + 1) + 0.12 * Math.sin(a * 7)); p.setXYZ(i, x * (1 + 0.08 * Math.sin(a * 5)), Math.pow(Math.max(h, 0), 1.6), z); }
       g.computeVertexNormals(); return g; })());
@@ -354,8 +358,8 @@ export class World {
   // merge static geometry per material to cut draw calls
   batch() {
     const S = this.staticGroup; S.updateMatrixWorld(true); const buckets = new Map(); const keep = [];
-    S.traverse((o) => { if (!o.isMesh) return; if (o.userData.bulb || o.userData.noBatch) { keep.push(o); return; } const key = o.material.uuid + (o.castShadow ? 'c' : 'n') + (o.receiveShadow ? 'r' : 'n'); let b = buckets.get(key); if (!b) { b = { mat: o.material, cast: o.castShadow, rec: o.receiveShadow, geos: [] }; buckets.set(key, b); } const g = o.geometry.clone(); g.applyMatrix4(o.matrixWorld); for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k); b.geos.push(g); });
-    for (const b of buckets.values()) { const mg = mergeGeometries(b.geos, false); if (!mg) { console.warn('merge failed'); continue; } const m = new THREE.Mesh(mg, b.mat); m.castShadow = b.cast; m.receiveShadow = b.rec; m.frustumCulled = false; this.root.add(m); b.geos.forEach((g) => g.dispose()); }
+    S.traverse((o) => { if (!o.isMesh) return; if (o.userData.bulb || o.userData.noBatch) { keep.push(o); return; } let hp = false; for (let q = o; q; q = q.parent) if (q.userData.hd) { hp = true; break; } const key = o.material.uuid + (o.castShadow ? 'c' : 'n') + (o.receiveShadow ? 'r' : 'n') + (hp ? 'h' : ''); let b = buckets.get(key); if (!b) { b = { mat: o.material, cast: o.castShadow, rec: o.receiveShadow, geos: [], hp }; buckets.set(key, b); } const g = o.geometry.clone(); g.applyMatrix4(o.matrixWorld); for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k); b.geos.push(g); });
+    for (const b of buckets.values()) { const mg = mergeGeometries(b.geos, false); if (!mg) { console.warn('merge failed'); continue; } const m = new THREE.Mesh(mg, b.mat); m.castShadow = b.cast; m.receiveShadow = b.rec; m.frustumCulled = false; this.root.add(m); if (b.hp) (this.propLo || (this.propLo = [])).push(m); b.geos.forEach((g) => g.dispose()); }
     for (const o of keep) { if (o.userData.noBatch) { const q = o.clone(); q.matrixAutoUpdate = false; q.matrix.copy(o.matrixWorld); q.matrixWorldNeedsUpdate = true; this.root.add(q); continue; } const p = new THREE.Mesh(o.geometry, o.material); p.applyMatrix4(o.matrixWorld); p.matrixAutoUpdate = true; p.position.setFromMatrixPosition(o.matrixWorld); p.rotation.set(0, 0, 0); p.scale.setScalar(1); this.root.add(p); }
     this.staticGroup = null;
   }

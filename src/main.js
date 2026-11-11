@@ -11,12 +11,20 @@ import { Zombies } from './zombie.js';
 import { upgradeZombies } from './hd/zombies.js';
 import { loadPacks } from './hd/pack.js';
 import { addGore } from './hd/gore.js';
+import { loadZombieKit, rigZombies } from './hd/zrig.js';
+import { createHD } from './hd/look.js';
 import { createMP } from './mp.js';
 let MP = null; // co-op client, created after the scene is ready
 let missions = null;
 let voice = null;
 import { makeMinimap } from './minimap.js';
-await loadPacks(); // pre-baked models, fetched separately (assets/*.bin)
+// Stage 1 (blocking): cars pack + the skinned zombie kit for the starting tier. Everything else streams in after the menu shows.
+const qs0 = new URLSearchParams(location.search), touch0 = qs0.has('touch') || (matchMedia('(pointer:coarse)').matches && 'ontouchstart' in window) || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+const q0 = qs0.get('quality') || (() => { try { return localStorage.getItem('vwz_q') || 'auto'; } catch (e) { return 'auto'; } })();
+const hiZ0 = q0 === 'high' || q0 === 'medium' || (q0 === 'auto' && !touch0);
+const zKitP = qs0.has('oldz') ? Promise.resolve(null) : loadZombieKit(hiZ0).catch((e) => { console.warn('zombie kit failed, using baked pack', e); return null; });
+await loadPacks(['cars']);
+const zKit = await zKitP; if (!zKit) await loadPacks(['zombies']);
 import { FX, Motes, Post } from './fx.js';
 import { Sound } from './audio.js';
 import { WEAPONS, CRATE_POOL, buildViewmodel } from './weapons.js';
@@ -58,9 +66,11 @@ const motes = new Motes(textures, 260, { R: 20, y0: 0.3, y1: 6, size: 0.07, alph
 const mist = new Motes(textures, 46, { R: 55, y0: 0.4, y1: 2.2, size: 5.5, alpha: 0.045, col: [0.55, 0.5, 0.62], additive: false, speed: 0.7 }); scene.add(mist.points);
 const zombies = new Zombies(scene, world, tier);
 const grenades = createGrenades({ scene, world, fx, zombies, sfx, get P() { return P; }, onKill: (z) => { if (!MP?.on) missions?.onKill(z); }, onSelf: (d) => { if (P.dead) return; P.hp -= d; P.lastHit = G.time; if (P.hp <= 0) die(); } });
-window.__hd = upgradeZombies(zombies); addGore(zombies); zombies.cam = cam;
+if (zKit) { rigZombies(zombies, zKit); window.__hd = { kit: zKit.hi ? 'hi' : 'lo' }; } else { window.__hd = upgradeZombies(zombies); addGore(zombies); } zombies.cam = cam;
 let mm; const minimap = (dt) => (mm || (mm = makeMinimap(world, zombies, P)))(dt);
 const viewScene = new THREE.Scene(); const post = new Post(renderer, scene, cam, viewScene);
+const hd = createHD({ renderer, scene, world, viewScene }); zombies.onBlood = hd.blood; let hdStarted = false;
+function hdKit(t) { if (t > 0 && zombies.kit && !zombies.kit.hi && !zombies._kitLoading) { zombies._kitLoading = true; loadZombieKit(true).then((k) => { rigZombies(zombies, k); window.__hd = { kit: 'hi' }; }).catch((e) => console.warn(e)); } }
 
 // environment map from the procedural night sky (PBR reflections)
 { const pm = new THREE.PMREMGenerator(renderer); const es = new THREE.Scene(); const m = new THREE.Mesh(world.sky.geometry, world.sky.material.clone()); m.scale.setScalar(0.12); es.add(m); const rt = pm.fromScene(es, 0, 0.1, 100); scene.environment = rt.texture; scene.environmentIntensity = 0.45; viewScene.environment = rt.texture; viewScene.environmentIntensity = 0.9; pm.dispose(); }
@@ -93,7 +103,7 @@ function applyTier(t) {
   renderer.setPixelRatio(pr); post.pr = pr;
   renderer.shadowMap.enabled = t > 0; renderer.shadowMap.needsUpdate = true;
   post.build(['direct', 'bloom', 'full'][t]); resize();
-  world.setTier(t); zombies.setTier(t); zombies.max = MAP.cap[t > 0 ? 1 : 0]; fx.tier = t; motes.points.visible = t > 0; mist.points.visible = true; mist.o.alpha = t === 0 ? 0.03 : 0.045; beam.visible = t > 0 && P.flashlight;
+  world.setTier(t); zombies.setTier(t); hd.setTier(t); if (hdStarted) { hd.load(t); hdKit(t); } zombies.max = MAP.cap[t > 0 ? 1 : 0]; fx.tier = t; motes.points.visible = t > 0; mist.points.visible = true; mist.o.alpha = t === 0 ? 0.03 : 0.045; beam.visible = t > 0 && P.flashlight;
   scene.environmentIntensity = t === 0 ? 0.45 : 0.3;
   spot.castShadow = t === 2; for (const z of zombies.list) z.root.traverse((o) => { if (o.isMesh) o.castShadow = t > 0; });
   scene.traverse((o) => { if (o.material && !Array.isArray(o.material)) o.material.needsUpdate = true; });
@@ -421,7 +431,7 @@ let last = performance.now(), simAcc = 0;
 function frame(now) {
   requestAnimationFrame(frame); const raw = Math.min(0.25, (now - last) / 1000); last = now; adapt(raw);
   tick(Math.min(raw, 0.05) * (G.state === 'menu' ? 0.6 : 1));
-  const lowHp = G.state === 'playing' && P.hp < P.maxHp * LOW_HP_FRAC ? 1 - P.hp / (P.maxHp * LOW_HP_FRAC) : 0; post.render(raw, G.time, clamp(P.dmg, 0, 1), lowHp);
+  const lowHp = G.state === 'playing' && P.hp < P.maxHp * LOW_HP_FRAC ? 1 - P.hp / (P.maxHp * LOW_HP_FRAC) : 0; hd.update(Math.min(raw, 0.1)); post.render(raw, G.time, clamp(P.dmg, 0, 1), lowHp);
 }
 function renderOnce() { post.render(0.016, G.time, clamp(P.dmg, 0, 1), 0); }
 
@@ -493,7 +503,7 @@ $('mapSeg').addEventListener('click', (e) => { const b = e.target.closest('butto
 P.slots = [slotOf('pistol'), null]; showGun(); applyTier(tier); syncMute(); syncMusic(); renderScores($('scoreList'), loadScores()); refreshGlobal();
 zombies.max = MAP.cap[tier > 0 ? 1 : 0];
 for (let i = 0; i < 40; i++) tick(0.05);
-requestAnimationFrame(() => { post.render(0.016, 0, 0, 0); $('loading').classList.add('done'); setTimeout(() => $('loading').remove(), 800); });
+requestAnimationFrame(() => { post.render(0.016, 0, 0, 0); $('loading').classList.add('done'); setTimeout(() => $('loading').remove(), 800); setTimeout(() => { hdStarted = true; hd.load(tier); hdKit(tier); }, qs.has('test') ? 0 : 120); });
 requestAnimationFrame(frame);
 // test / debug hooks (harmless in production)
 // PWA offline cache (skipped on file:// and in tests)
@@ -553,4 +563,4 @@ $('lobbyLeave').onclick = () => { $('lobby').classList.add('hidden'); toMenu(); 
 $('coQuick').onclick = () => MP.connect({ url: MP_URL, name: coName(), join: { map: MAP.id } });
 $('coCreate').onclick = () => MP.connect({ url: MP_URL, name: coName(), join: { create: true, map: MAP.id } });
 $('coJoin').onclick = () => { const c = $('coCode').value.trim().toUpperCase(); if (!/^[A-Z2-9]{5}$/.test(c)) { $('coMsg').textContent = 'Room codes are 5 letters/numbers'; return; } MP.connect({ url: MP_URL, name: coName(), join: { code: c } }); };
-window.__game = { MP, missions, grenades, get MODE() { return MODE; }, MAP, MAPS, PLAYER_MAX_HP, MEDKIT_HP_FRAC, MEDKIT_COOLDOWN, MEDKIT_HEAL_FRAC, medKitReady, medKitOnKill, G, P, world, zombies, fx, input, tick, startGame, shoot, applyTier, switchTo, startReload, pause, resume, toMenu, giveWeapon, spawnPower, pickPower, interact, findFocus, die, get tier() { return tier; }, cam, renderer, scene, WEAPONS, sfx, renderOnce, aimAt(z, head = false) { const dx = z.pos.x - P.x, dz = z.pos.z - P.z, dy = (head ? 1.66 : 1.0) * z.scale - 1.7; P.yaw = Math.atan2(-dx, -dz); P.pitch = Math.atan2(dy, Math.hypot(dx, dz)); P.rP = P.rY = 0; }, isTouch };
+window.__game = { hd, MP, missions, grenades, get MODE() { return MODE; }, MAP, MAPS, PLAYER_MAX_HP, MEDKIT_HP_FRAC, MEDKIT_COOLDOWN, MEDKIT_HEAL_FRAC, medKitReady, medKitOnKill, G, P, world, zombies, fx, input, tick, startGame, shoot, applyTier, switchTo, startReload, pause, resume, toMenu, giveWeapon, spawnPower, pickPower, interact, findFocus, die, get tier() { return tier; }, cam, renderer, scene, WEAPONS, sfx, renderOnce, aimAt(z, head = false) { const dx = z.pos.x - P.x, dz = z.pos.z - P.z, dy = (head ? 1.66 : 1.0) * z.scale - 1.7; P.yaw = Math.atan2(-dx, -dz); P.pitch = Math.atan2(dy, Math.hypot(dx, dz)); P.rP = P.rY = 0; }, isTouch };
