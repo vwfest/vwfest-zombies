@@ -3,9 +3,10 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { Mats, makeBeetle, makeBus, makeBeetleLo, makeBusLo, makeTireStack, makeDrum, makeCrate, makePole, makeCactus, makeRock, randPaint } from './props.js';
 import { buildViewmodel, WEAPONS } from './weapons.js';
 import { rnd, pick, clamp, TAU } from './util.js';
+import { areaOf, YARD } from './nav.js';
 
 export const DOOR_Z = -24;
-export const areaOf = (z) => (z > DOOR_Z ? 'A' : 'B');
+export { areaOf };
 
 function labelTex(lines, color = '#18d1a0', w = 512, h = 256) {
   const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d');
@@ -19,6 +20,7 @@ export class World {
   constructor(scene, T, tier) {
     this.scene = scene; this.T = T; this.M = new Mats(T); this.tier = tier;
     this.colliders = []; this.windows = []; this.buys = []; this.lamps = []; this.dyn = []; this.fall = [];
+    this.doorInfos = []; this.doors = []; this.missionMeshes = new Map(); this.mapId = 'junkyard';
     this.staticGroup = new THREE.Group(); this.root = new THREE.Group(); scene.add(this.root);
     this.build();
     this.batch();
@@ -33,21 +35,24 @@ export class World {
   }
   build() {
     const { M, T, scene } = this;
+    this.mapId = 'junkyard';
     this.buildSky(); this.buildGround();
     // ---- perimeter + divider walls with window openings ----
     const H = 3.2, th = 0.4;
     const wallX = (z, xa, xb, opens = [], mat = M.fence) => this.wall('x', z, xa, xb, opens, H, th, mat);
     const wallZ = (x, za, zb, opens = [], mat = M.fence) => this.wall('z', x, za, zb, opens, H, th, mat);
-    wallX(24, -24, 24, [{ c: -10, id: 'S1' }, { c: 11, id: 'S2' }]);          // south, area A
-    wallZ(24, -24, 24, [{ c: -4, id: 'E1', area: 'A' }]);                   // east
-    wallZ(-24, -24, 24, [{ c: 6, id: 'W1', area: 'A' }]);                   // west
-    wallX(-24, -24, 24, [{ c: 0, id: 'DOOR', door: true, w: 6 }]);          // divider with gate gap
+    const gate = (id) => { const g = YARD.gates.find((q) => q.id === id); return { c: g.axis === 'x' ? g.x : g.z, id: g.id, door: true, w: g.w, price: g.price, name: g.name, blurb: g.blurb, areas: g.areas, stand: g.stand }; };
+    wallX(24, -24, 24, [{ c: -10, id: 'S1', area: 'A' }, { c: 11, id: 'S2', area: 'A' }]);
+    wallZ(24, -24, 24, [{ c: -4, id: 'E1', area: 'A' }, gate('AC')]);
+    wallZ(-24, -24, 24, [{ c: 6, id: 'W1', area: 'A' }, gate('AD')]);
+    wallX(-24, -24, 24, [gate('AB')]);
     wallZ(24, -52, -24, [{ c: -40, id: 'E2', area: 'B' }]);
-    wallZ(-24, -52, -24, [{ c: -38, id: 'W2', area: 'B' }]);
-    wallX(-52, -24, 24, [{ c: 0, id: 'N1', area: 'B' }]);
+    wallZ(-24, -52, -24, [{ c: -38, id: 'W2', area: 'B' }, gate('SD')]);
+    wallX(-52, -24, 24, [{ c: -12, id: 'N1', area: 'B' }, gate('BE')]);
     // ---- interior floors ----
     const fl = (w, d, x, z) => { const f = new THREE.Mesh(new THREE.PlaneGeometry(w, d), M.concrete); f.rotation.x = -Math.PI / 2; f.position.set(x, 0.015, z); f.receiveShadow = true; this.staticGroup.add(f); };
     fl(48, 48, 0, 0); fl(48, 28, 0, -38);
+    this.buildLots(wallX, wallZ, fl);
     // ---- gate (dynamic) + neon sign ----
     this.buildGate();
     // ---- props: area A ----
@@ -74,7 +79,8 @@ export class World {
       const bp = p.userData.bulbPos.clone().applyMatrix4(p.matrixWorld); this.lamps.push({ pos: bp, teal: !!t, ph: rnd(100) }); this.staticGroup.add(p);
     }
     // ---- wall-buys, crate, scenery ----
-    this.wallBuy('smg', -14, DOOR_Z + 0.25, 0); this.wallBuy('shotgun', 23.75, -15, -Math.PI / 2); this.wallBuy('rifle', -23.75, -30, Math.PI / 2);
+    this.wallBuy('smg', -14, DOOR_Z + 0.25, 0); this.wallBuy('shotgun', 23.75, -15, -Math.PI / 2); this.wallBuy('rifle', -23.75, -44, Math.PI / 2);
+    this.wallBuy('smg', 49.65, 12, -Math.PI / 2); this.wallBuy('shotgun', -49.65, -16, Math.PI / 2); this.wallBuy('rifle', 18, -75.65, 0);
     this.buildCrate(-17.5, 14.5);
     this.scenery();
     // lights
@@ -95,11 +101,18 @@ export class World {
   opening(axis, c, o, H, th, mat) {
     const { M } = this, w = o.w || 3.2;
     if (o.door) { // gate gap: posts only; the gate itself is dynamic
-      if (axis === 'x') { this.box(0.5, H + 0.8, 0.7, o.c - w / 2, (H + 0.8) / 2, c, M.fenceDark); this.box(0.5, H + 0.8, 0.7, o.c + w / 2, (H + 0.8) / 2, c, M.fenceDark); }
-      this.doorInfo = { c: o.c, z: c, w }; return;
+      const gx = axis === 'x' ? o.c : c, gz = axis === 'x' ? c : o.c;
+      if (axis === 'x') { this.box(0.5, H + 0.8, 0.7, gx - w / 2, (H + 0.8) / 2, gz, M.fenceDark); this.box(0.5, H + 0.8, 0.7, gx + w / 2, (H + 0.8) / 2, gz, M.fenceDark); }
+      else { this.box(0.7, H + 0.8, 0.5, gx, (H + 0.8) / 2, gz - w / 2, M.fenceDark); this.box(0.7, H + 0.8, 0.5, gx, (H + 0.8) / 2, gz + w / 2, M.fenceDark); }
+      const id = o.id === 'DOOR' ? 'AB' : (o.id || 'AB');
+      const areas = o.areas || ['A', 'B'];
+      const stand = o.stand || (axis === 'x' ? { A: { x: gx, z: gz + 1.8 }, B: { x: gx, z: gz - 1.8 } } : { A: { x: gx - 1.8, z: gz }, B: { x: gx + 1.8, z: gz } });
+      this.doorInfos.push({ id, x: gx, z: gz, w, axis, price: o.price || 1250, name: o.name || 'Back lot', blurb: o.blurb || 'The back lot awaits', areas, stand });
+      return;
     }
-    const n = axis === 'x' ? { x: 0, z: c > 0 ? 1 : -1 } : { x: c > 0 ? 1 : -1, z: 0 };
+    let n = axis === 'x' ? { x: 0, z: c > 0 ? 1 : -1 } : { x: c > 0 ? 1 : -1, z: 0 };
     if (axis === 'x' && c === -52) n.z = -1;
+    if (o.outN) n = axis === 'x' ? { x: 0, z: o.outN } : { x: o.outN, z: 0 };
     const cx = axis === 'x' ? o.c : c, cz = axis === 'x' ? c : o.c;
     const sill = 0.95, top = 2.5, len = w;
     const dims = (l, h, y) => (axis === 'x' ? [l, h, th] : [th, h, l]);
@@ -117,23 +130,111 @@ export class World {
       p.position.copy(home); p.rotation.set(0, ry, rnd(-0.05, 0.05)); p.castShadow = true; p.receiveShadow = true; p.userData = { home, rotZ: p.rotation.z, ry }; this.root.add(p); planks.push(p);
     }
     const lamp = new THREE.Mesh(new THREE.BoxGeometry(axis === 'x' ? 0.3 : 0.06, 0.06, axis === 'x' ? 0.06 : 0.3), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.8, 0.3, 0.15), toneMapped: false })); lamp.position.set(cx - n.x * 0.3, 2.85, cz - n.z * 0.3); lamp.userData.noAO = true; this.root.add(lamp);
-    this.windows.push({ id: o.id, area: o.area || (c > DOOR_Z && axis === 'x' ? 'A' : c > 0 ? 'A' : 'A'), c: new THREE.Vector3(cx, 0, cz), n, t: { x: -n.z, z: n.x }, out: { x: cx + n.x * 1.5, z: cz + n.z * 1.5 }, in: { x: cx - n.x * 1.6, z: cz - n.z * 1.6 }, planks, count: 6, attackers: 0, cool: 0, axis, lamp });
-    const w0 = this.windows[this.windows.length - 1]; w0.area = areaOf(cz);
+    this.windows.push({ id: o.id, area: o.area || areaOf(cx, cz, this.mapId), c: new THREE.Vector3(cx, 0, cz), n, t: { x: -n.z, z: n.x }, out: { x: cx + n.x * 1.5, z: cz + n.z * 1.5 }, in: { x: cx - n.x * 1.6, z: cz - n.z * 1.6 }, planks, count: 6, attackers: 0, cool: 0, axis, lamp });
   }
   removePlank(w) { if (w.count <= 0) return false; const p = w.planks[w.count - 1]; w.count--; p.userData.fall = { vx: w.n.x * rnd(1, 3) + rnd(-1, 1), vy: rnd(1, 3), vz: w.n.z * rnd(1, 3) + rnd(-1, 1), t: 0, rx: rnd(-6, 6), rz: rnd(-6, 6) }; this.fall.push(p); return true; }
   addPlank(w) { if (w.count >= 6) return false; const p = w.planks[w.count]; w.count++; p.userData.fall = null; const i = this.fall.indexOf(p); if (i >= 0) this.fall.splice(i, 1); p.visible = true; p.position.copy(p.userData.home); p.rotation.set(0, p.userData.ry, p.userData.rotZ); return true; }
-  // ---- gate ----
-  buildGate() {
-    const { M } = this; const d = this.doorInfo; const mat = M.fence;
-    const g = new THREE.Group(); const panel = new THREE.Mesh(new THREE.BoxGeometry(d.w, 3.4, 0.25), mat); panel.position.y = 1.7; panel.castShadow = panel.receiveShadow = true; g.add(panel);
-    for (let i = 0; i < 6; i++) { const s = new THREE.Mesh(new THREE.BoxGeometry(0.5, 3.4, 0.05), i % 2 ? new THREE.MeshStandardMaterial({ color: 0xe8b82e, roughness: 0.6, metalness: 0.3 }) : M.fenceDark); s.position.set(-d.w / 2 + 0.3 + i * 1.0, 1.7, 0.15); g.add(s); }
-    g.position.set(d.c, 0, d.z); this.root.add(g); this.door = { mesh: g, open: false, t: 0, price: 1250, col: this.addCol(d.c - d.w / 2, d.c + d.w / 2, d.z - 0.2, d.z + 0.2, 3.4), pos: { x: d.c, z: d.z } };
-    // neon sign above gate, facing +Z (area A)
-    const s = new THREE.Mesh(new THREE.PlaneGeometry(7.5, 1.9), new THREE.MeshBasicMaterial({ map: this.T.sign, color: new THREE.Color(1.9, 1.9, 1.9), toneMapped: false }));
-    s.position.set(d.c, 5.0, d.z + 0.45); this.staticGroup.add(s);
-    for (const sx of [-1, 1]) this.box(0.18, 4.4, 0.18, d.c + sx * 3.5, 2.5, d.z + 0.4, M.fenceDark);
-    this.signPos = new THREE.Vector3(d.c, 5.0, d.z + 1);
+  // ---- gates (AB is also exposed as this.door) ----
+  buildGate() { this.buildGates(); }
+  buildGates() {
+    const { M } = this; const stripe = new THREE.MeshStandardMaterial({ color: 0xe8b82e, roughness: 0.6, metalness: 0.3 });
+    this.doors = [];
+    for (const d of this.doorInfos) {
+      const alongX = d.axis !== 'z';
+      const g = new THREE.Group();
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(alongX ? d.w : 0.25, 3.4, alongX ? 0.25 : d.w), M.fence);
+      panel.position.y = 1.7; panel.castShadow = panel.receiveShadow = true; g.add(panel);
+      const n = Math.max(3, Math.round(d.w));
+      for (let i = 0; i < n; i++) {
+        const s = new THREE.Mesh(new THREE.BoxGeometry(alongX ? 0.42 : 0.05, 3.4, alongX ? 0.05 : 0.42), i % 2 ? stripe : M.fenceDark);
+        const u = -d.w / 2 + (d.w * (i + 0.5)) / n;
+        s.position.set(alongX ? u : 0.15, 1.7, alongX ? 0.15 : u); g.add(s);
+      }
+      g.position.set(d.x, 0, d.z); this.root.add(g);
+      const col = alongX
+        ? this.addCol(d.x - d.w / 2, d.x + d.w / 2, d.z - 0.2, d.z + 0.2, 3.4, { door: true, gate: d.id })
+        : this.addCol(d.x - 0.2, d.x + 0.2, d.z - d.w / 2, d.z + d.w / 2, 3.4, { door: true, gate: d.id });
+      const door = { id: d.id, mesh: g, open: false, t: 0, price: d.price, name: d.name, blurb: d.blurb, areas: d.areas, stand: d.stand, axis: d.axis, col, pos: { x: d.x, z: d.z }, x: d.x, z: d.z };
+      this.doors.push(door);
+      if (d.id === 'AB') {
+        const s = new THREE.Mesh(new THREE.PlaneGeometry(7.5, 1.9), new THREE.MeshBasicMaterial({ map: this.T.sign, color: new THREE.Color(1.9, 1.9, 1.9), toneMapped: false }));
+        s.position.set(d.x, 5.0, d.z + 0.45); this.staticGroup.add(s);
+        for (const sx of [-1, 1]) this.box(0.18, 4.4, 0.18, d.x + sx * 3.5, 2.5, d.z + 0.4, M.fenceDark);
+        this.signPos = new THREE.Vector3(d.x, 5.0, d.z + 1);
+      } else {
+        const face = d.axis === 'z' ? Math.PI / 2 : 0;
+        const lab = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 0.7), new THREE.MeshBasicMaterial({ map: labelTex([{ t: d.name.toUpperCase(), s: 64, y: 128, w: 800, c: '#ffd36b' }], '#ffd36b', 512, 256), toneMapped: false, color: new THREE.Color(0.9, 0.9, 0.9) }));
+        lab.position.set(d.x, 4.15, d.z); lab.rotation.y = face; this.root.add(lab);
+      }
+    }
+    this.door = this.doors.find((d) => d.id === 'AB') || this.doors[0];
   }
+  buildLots(wallX, wallZ, fl) {
+    const { M } = this; const P = this.place.bind(this);
+    // Lot C — fuel yard, east of A. Shared west wall is A's east fence (gate AC).
+    wallZ(50, 2, 22, [{ c: 8, id: 'C1', area: 'C' }, { c: 16, id: 'C2', area: 'C' }]);
+    wallX(22, 24, 50, [{ c: 36, id: 'C3', area: 'C' }]);
+    wallX(2, 24, 50, []);
+    fl(26, 20, 37, 12);
+    P(makeBeetle(M, 0xd2a13a, { missing: true }), 32, 16, 0.4); P(makeBus(M, 0xc45a2a, 0xe6dcc0), 30, 8, Math.PI / 2);
+    for (const [x, z, c] of [[40, 18, 0xb23a2e], [41.2, 17.2, 0xd9792a], [39.2, 18.8, 0x3a6ea5], [44, 7, 0x8aa84a]]) P(makeDrum(M, c), x, z);
+    P(makeCrate(M, 1.1), 46, 14); P(makeCrate(M, 0.9), 46.8, 15.1);
+    this.lampAt(44, 14, 1, 1.2);
+    // Lot D — bus barn, west of A and the south edge of B. Gates AD and SD.
+    wallZ(-50, -34, -2, [{ c: -10, id: 'D1', area: 'D' }, { c: -24, id: 'D2', area: 'D' }]);
+    wallX(-2, -50, -24, []);
+    wallX(-34, -50, -24, [{ c: -38, id: 'D3', area: 'D' }]);
+    fl(26, 32, -37, -18);
+    P(makeBus(M, 0x5e8fc0, 0xe6dcc0), -38, -10, 0); P(makeBus(M, 0xd9792a, 0xcfc6ae, { tilt: 0.03 }), -38, -24, 0);
+    P(makeBeetle(M, 0x8aa84a, { door: true }), -44, -16, Math.PI / 2);
+    P(makeCrate(M, 1.2), -46, -6); P(makeCrate(M, 1.0), -32, -30);
+    this.lampAt(-44, -22, 0, 0.4);
+    // Lot E — radio yard, north-east of B. Gate BE.
+    wallX(-76, 4, 24, [{ c: 8, id: 'EN', area: 'E' }]);
+    wallZ(4, -76, -52, [{ c: -68, id: 'EW', area: 'E', outN: -1 }]);
+    wallZ(24, -76, -52, [{ c: -64, id: 'EE', area: 'E' }]);
+    fl(20, 24, 14, -64);
+    P(makeBeetle(M, 0xcfcfc4, { missing: true, tilt: -0.04 }), 10, -64, 0.6); P(makeBus(M, 0x3a6ea5, 0xe6dcc0), 18, -68, Math.PI / 2);
+    P(makeCrate(M, 1.0), 8, -72); P(makeDrum(M, 0xd9792a), 20, -58); P(makeDrum(M, 0x3a6ea5), 21, -57.2);
+    this.lampAt(10, -70, 1, 2.2);
+    this.buildDressing();
+  }
+  lampAt(x, z, t, r) {
+    const p = makePole(this.M, !!t); p.position.set(x, 0, z); p.rotation.y = r; p.traverse((m) => { if (m.isMesh) m.castShadow = !m.userData.bulb; }); p.updateMatrixWorld(true);
+    this.addCol(x - 0.2, x + 0.2, z - 0.2, z + 0.2, 5);
+    const bp = p.userData.bulbPos.clone().applyMatrix4(p.matrixWorld); this.lamps.push({ pos: bp, teal: !!t, ph: rnd(100) }); this.staticGroup.add(p);
+  }
+  buildDressing() {
+    const { M } = this; const job = (id) => YARD.jobs.find((j) => j.id === id);
+    const fuel = job('fuel').pad, carb = job('carb').pad, radio = job('radio').pad, parts = job('parts').pad;
+    // generator just inside A, in front of gate AC
+    this.box(1.5, 0.9, 0.9, 21.05, 0.45, 12, M.fenceDark); this.box(1.6, 0.12, 1.0, 21.05, 0.96, 12, M.fence);
+    this.addCol(20.3, 21.8, 11.55, 12.45, 1.05);
+    const gen = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.16, 0.16), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 2.4, 1.2), toneMapped: false }));
+    gen.position.set(20.2, 1.05, 12); gen.userData.noAO = true; this.root.add(gen);
+    // carb bench in B, clear of the side-gate stand
+    this.box(1.3, 0.75, 0.7, -19.5, 0.38, -31.15, M.wood); this.addCol(-20.2, -18.8, -31.55, -30.75, 0.9);
+    // scrap bench in C
+    this.box(1.4, 0.8, 0.7, 42.2, 0.4, 6.3, M.wood); this.addCol(41.5, 42.9, 5.95, 6.65, 0.95);
+    // radio mast in B. The hold pad is beside the pole, not inside it.
+    this.box(0.18, 5.2, 0.18, 9.4, 2.6, -43.4, M.fenceDark); this.box(1.1, 0.16, 0.16, 9.4, 4.9, -43.4, M.fence);
+    this.box(0.7, 0.45, 0.4, 6.7, 0.9, -43.1, M.fenceDark); this.addCol(9.25, 9.55, -43.55, -43.25, 5.2);
+    const ant = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 0.35, 0.25), toneMapped: false }));
+    ant.position.set(9.9, 5.05, -43.4); ant.userData.noAO = true; this.root.add(ant);
+    // radio yard mast so lot E reads as the transmitter once the gate opens
+    this.box(0.16, 6.4, 0.16, 16, 3.2, -62, M.fenceDark); this.box(1.4, 0.1, 0.1, 16, 6.2, -62, M.fence);
+    this.addCol(15.85, 16.15, -62.15, -61.85, 6.4);
+    const mark = (id, x, z, mesh) => { mesh.position.set(x, 0, z); mesh.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } }); this.root.add(mesh); this.missionMeshes.set(id, mesh); };
+    const can = () => { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.42, 8), M.paint(0xb23a2e))); g.children[0].position.y = 0.22; const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.12, 6), M.fenceDark); cap.position.y = 0.46; g.add(cap); return g; };
+    for (const it of job('fuel').items) mark(it.id, it.x, it.z, can());
+    const carbM = new THREE.Group(); carbM.add(new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.16, 0.2), M.chrome)); carbM.children[0].position.y = 0.2; const horn = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.08, 0.22, 6), M.paint(0xd2a13a)); horn.position.set(0, 0.28, 0); carbM.add(horn);
+    mark('carb', job('carb').items[0].x, job('carb').items[0].z, carbM);
+    for (const it of job('parts').items) { const g = new THREE.Group(); const m = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.05, 6, 10), M.chrome); m.rotation.x = Math.PI / 2; m.position.y = 0.12; g.add(m); mark(it.id, it.x, it.z, g); }
+    for (const it of job('bus').items) { const g = new THREE.Group(); const p = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.55, 0.7), M.wood); p.position.y = 1.35; g.add(p); mark(it.id, it.x, it.z, g); }
+    for (const [id, mesh] of this.missionMeshes) mesh.visible = id.startsWith('f');
+    this._dress = { fuel, carb, radio, parts };
+  }
+  resetDoors() { for (const d of this.doors) { d.open = false; d.t = 0; d.mesh.position.y = 0; d.col.off = false; } }
   shack(x, z, w, d) {
     const { M } = this; this.box(w, 3.0, d, x, 1.5, z, M.fence); this.box(w + 0.5, 0.2, d + 0.5, x, 3.1, z, M.fenceDark); this.addCol(x - w / 2, x + w / 2, z - d / 2, z + d / 2, 3.2);
     this.box(1.4, 2.1, 0.1, x - 1.2, 1.05, z + d / 2 + 0.05, M.wood, { cast: false }); const win = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.9), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 1.7, 0.7), toneMapped: false })); win.position.set(x + 1.5, 1.8, z + d / 2 + 0.03); this.staticGroup.add(win);
@@ -188,7 +289,7 @@ export class World {
   scenery() {
     const { M } = this; const S = this.staticGroup;
     // dunes + rocks + cacti + distant mesas (non-colliding, outside the fences)
-    const inside = (x, z) => x > -30 && x < 30 && z > -58 && z < 30;
+    const inside = (x, z) => (x > -26 && x < 26 && z > -54 && z < 26) || (x > 22 && x < 52 && z > 0 && z < 24) || (x < -22 && x > -52 && z > -36 && z < 0) || (x > 2 && x < 26 && z < -50 && z > -78);
     // dunes: textured sand (own repeat), lumpy smooth-shaded mound instead of a flat-shaded 12x6 ellipsoid
     const dm = M.sand.clone(); dm.map = M.sand.map.clone(); dm.map.repeat.set(6, 3); dm.bumpMap = M.sand.bumpMap.clone(); dm.bumpMap.repeat.set(6, 3); dm.color = new THREE.Color(0xb7a184); dm.bumpScale = 1.5;
     let dg; const duneGeo = () => dg || (dg = (() => { const g = new THREE.SphereGeometry(1, 40, 14, 0, TAU, 0, Math.PI / 2), p = g.attributes.position;
@@ -260,7 +361,7 @@ export class World {
     // falling planks
     for (let i = this.fall.length - 1; i >= 0; i--) { const p = this.fall[i], f = p.userData.fall; if (!f) { this.fall.splice(i, 1); continue; } f.t += dt; f.vy -= 9.8 * dt; p.position.x += f.vx * dt; p.position.y += f.vy * dt; p.position.z += f.vz * dt; p.rotation.x += f.rx * dt; p.rotation.z += f.rz * dt; if (p.position.y < 0.08) { p.position.y = 0.08; f.vy = 0; f.vx *= 0.5; f.vz *= 0.5; } if (f.t > 1.4) { p.visible = false; this.fall.splice(i, 1); } }
     // gate
-    const d = this.door; if (d.open && d.t < 1) { d.t = Math.min(1, d.t + dt / 2.4); d.mesh.position.y = d.t * 3.6; if (d.t > 0.5) d.col.off = true; }
+    for (const d of this.doors) if (d.open && d.t < 1) { d.t = Math.min(1, d.t + dt / 2.4); d.mesh.position.y = d.t * 3.6; if (d.t > 0.5) d.col.off = true; }
     // lights: assign nearest lamps to pool; flicker
     const px = player.x, pz = player.z; const order = this.lamps.map((l, i) => ({ i, d: (l.pos.x - px) ** 2 + (l.pos.z - pz) ** 2 })).sort((a, b) => a.d - b.d);
     this.lampPool.forEach((l, k) => { const L = this.lamps[order[k].i]; l.position.copy(L.pos); l.color.copy(L.teal ? new THREE.Color(0.35, 1, 0.8) : new THREE.Color(1, 0.7, 0.4)); const fl = 0.85 + 0.15 * Math.sin(time * 9 + L.ph) * Math.sin(time * 3.7 + L.ph * 2) + (Math.sin(time * 31 + L.ph) > 0.97 ? -0.5 : 0); l.intensity = 95 * Math.max(0.2, fl); });
