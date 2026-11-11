@@ -2,9 +2,11 @@
 // Pure logic (no sockets) so it can be unit tested. Coordinates match the client maps (metres, y up).
 'use strict';
 const MAPS = require('./maps.json'); const WEAPONS = require('./weapons.js'); const { World, areaOf, DOOR_Z } = require('./world.js');
-const { yard, route, standOf, activeAreas } = require('./nav.js'); const { Missions } = require('./missions.js');
+const { yard, activeAreas, portalTarget } = require('./nav.js');
+const { Missions } = require('./missions.js');
 const MAX_PLAYERS = 4, PLAYER_HP = 200, START_PTS = 500, ZDMG = 22, BRUTE_DMG = 44, MAX_SPEED = 9.5, EYE = 1.7, PR = 0.35, ZR = 0.36;
-const CRATE_POOL = ['smg', 'shotgun', 'rifle', 'lmg'], REPAIR_GAP = 450, PLANKS = 6, MED_CD = 20, UP_LIFE = 28;
+const CRATE_POOL = ['smg', 'shotgun', 'rifle', 'lmg', 'sawed', 'lever'], REPAIR_GAP = 450, PLANKS = 6, MED_CD = 20, UP_LIFE = 28;
+const NADE_FUSE = 5, NADE_LURE = 16, NADE_BLAST = 4.6, NADE_MAX = 2, NADE_SPEED = 14;
 const fin = (v) => typeof v === 'number' && Number.isFinite(v); const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 function roundCount(r, n) { return Math.max(3, Math.round((6 + r * 2.3 + r * r * 0.12) * (1 + 0.5 * (n - 1)))); }
 function zStats(round) { return { hp: round < 10 ? 80 + 35 * round : 430 * Math.pow(1.1, round - 9), sp: Math.min(5.0, 1.5 + round * 0.24) }; }
@@ -17,14 +19,14 @@ class Room {
     this.wins = this.map.windows.map((w) => ({ ...w, count: PLANKS, cool: 0 }));
     const specs = this.mapId === 'junkyard' ? yard.gates : [{ id: 'AB', price: this.map.door.price, name: 'Back lot', blurb: 'The back lot awaits', areas: ['A', 'B'], x: this.map.door.x, z: this.map.door.z, axis: 'x', stand: { A: { x: this.map.door.x, z: DOOR_Z + 1.8 }, B: { x: this.map.door.x, z: DOOR_Z - 1.8 } } }];
     this.doors = specs.map((g) => ({ ...g, stand: g.stand, open: false })); this.door = this.doors.find((d) => d.id === 'AB') || this.doors[0];
-    this.crate = { ...this.map.crate, state: 'idle', t: 0, weapon: null, by: null }; this.missions = new Missions(this);
+    this.crate = { ...this.map.crate, state: 'idle', t: 0, weapon: null, by: null }; this.missions = new Missions(this); this.nades = new Map(); this.nextN = 1;
   }
   get size() { return this.players.size; }
   activeWins() { const areas = activeAreas(this.doors); return this.wins.filter((w) => areas.has(w.area)); }
   openGate(id, by, quiet) { const g = this.doors.find((d) => d.id === id); if (!g || g.open) return false; g.open = true; this.world.setGate(id, true); if (!quiet) this.events.push({ e: 'door', p: by || '', id }); return true; }
   addPlayer(id, name) {
     if (this.players.size >= MAX_PLAYERS) return null; const s = this.map.spawn, k = this.players.size;
-    const p = { id, name: String(name || 'Survivor').replace(/[^A-Za-z0-9_\- .]/g, '').slice(0, 16) || 'Survivor', x: s.x + (k - 1.5) * 1.2, z: s.z, yaw: 0, pitch: 0, hp: PLAYER_HP, pts: START_PTS, kills: 0, heads: 0, dead: false, lastShot: {}, lastIn: 0, lastHit: -99, lastRepair: 0, lastMed: -99, connected: true, ready: false, owned: new Set(['pistol']), ammo: { pistol: packAmmo('pistol') }, reloading: null };
+    const p = { id, name: String(name || 'Survivor').replace(/[^A-Za-z0-9_\- .]/g, '').slice(0, 16) || 'Survivor', x: s.x + (k - 1.5) * 1.2, z: s.z, yaw: 0, pitch: 0, hp: PLAYER_HP, pts: START_PTS, kills: 0, heads: 0, dead: false, lastShot: {}, lastIn: 0, lastHit: -99, lastRepair: 0, lastMed: -99, connected: true, ready: false, owned: new Set(['pistol']), ammo: { pistol: packAmmo('pistol') }, reloading: null, held: 'pistol', nades: 1 };
     this.world.resolve(p, PR); this.players.set(id, p); return p;
   }
   removePlayer(id) { this.players.delete(id); }
@@ -46,11 +48,13 @@ class Room {
     let dx = m.x - p.x, dz = m.z - p.z; const d = Math.hypot(dx, dz), lim = MAX_SPEED * dt + 0.25; let ok = d <= lim;
     if (d > lim) { dx *= lim / d; dz *= lim / d; }
     const tgt = { x: p.x + dx, z: p.z + dz }, hit = this.world.segBlock(p, tgt); if (hit !== null) { ok = false; const k = Math.max(0, hit - 0.05); tgt.x = p.x + dx * k; tgt.z = p.z + dz * k; }
-    this.world.resolve(tgt, PR); p.x = tgt.x; p.z = tgt.z; p.yaw = m.yaw; p.pitch = clamp(m.pitch, -1.5, 1.5); return ok;
+    this.world.resolve(tgt, PR); p.x = tgt.x; p.z = tgt.z; p.yaw = m.yaw; p.pitch = clamp(m.pitch, -1.5, 1.5); if (typeof m.w === 'string' && p.owned.has(m.w)) p.held = m.w; return ok;
   }
   gain(p, n) { const g = n * (this.double > 0 ? 2 : 1); p.pts += g; return g; }
   // ---- interactions (all distance-checked + paid server-side) ----
-  buy(id, w) { const p = this.players.get(id); if (!p || p.dead) return { ok: false, why: 'dead' }; if (this.phase === 'lobby') return { ok: false, why: 'lobby' }; const sts = this.map.buys.filter((b) => b.id === w);
+  buy(id, w) { const p = this.players.get(id); if (!p || p.dead) return { ok: false, why: 'dead' }; if (this.phase === 'lobby') return { ok: false, why: 'lobby' };
+    if (w === 'nade') { const st = this.map.buys.find((b) => b.id === 'nade' && this.near(p, b.x, b.z, 2.2)); if (!st) return { ok: false, why: 'far' }; if ((p.nades || 0) >= NADE_MAX) return { ok: false, why: 'full' }; if (p.pts < st.price) return { ok: false, why: 'pts' }; p.pts -= st.price; p.nades = (p.nades || 0) + 1; this.events.push({ e: 'buy', p: id, w: 'nade' }); return { ok: true, w: 'nade', nades: p.nades }; }
+    const sts = this.map.buys.filter((b) => b.id === w);
     if (!sts.length) return { ok: false, why: 'station' }; const st = sts.find((b) => this.near(p, b.x, b.z, 2.2)); if (!st) return { ok: false, why: 'far' };
     const price = p.owned.has(w) ? Math.floor(st.price / 2) : st.price; if (p.pts < price) return { ok: false, why: 'pts' }; p.pts -= price; p.owned.add(w); p.ammo[w] = packAmmo(w); if (p.reloading && p.reloading.w === w) p.reloading = null; this.events.push({ e: 'buy', p: id, w }); return { ok: true, w, refill: price < st.price }; }
   openDoor(id, gateId = 'AB') { const p = this.players.get(id); const g = this.doors.find((d) => d.id === (gateId || 'AB')); if (!p || p.dead || !g || g.open) return { ok: false, why: 'state' }; if (this.phase === 'lobby') return { ok: false, why: 'lobby' };
@@ -111,7 +115,73 @@ class Room {
       let t = null, head = false; if (th !== null && (tb === null || th <= tb + 0.15)) { t = th; head = true; } else if (tb !== null) t = tb;
       if (t !== null && t < max && (!best || t < best.t)) best = { z, t, head }; }
     return best; }
-  startRound(n) { this.round = n; this.phase = 'round'; this.toSpawn = roundCount(n, this.size); this.brutes = n >= 5 && n % 5 === 0 ? Math.min(4, 1 + ((n / 5) | 0)) : 0; this.spawnT = 1.5; this.drops = 0; this.events.push({ e: 'round', n }); }
+  startRound(n) { this.round = n; this.phase = 'round'; this.toSpawn = roundCount(n, this.size); this.brutes = n >= 5 && n % 5 === 0 ? Math.min(4, 1 + ((n / 5) | 0)) : 0; this.spawnT = 1.5; this.drops = 0; for (const p of this.players.values()) if ((p.nades || 0) < 1) p.nades = 1; this.events.push({ e: 'round', n }); }
+  throwNade(id, m) {
+    const p = this.players.get(id); if (!p || p.dead) return { ok: false, why: 'dead' }; if (this.phase === 'lobby') return { ok: false, why: 'lobby' };
+    if ((p.nades || 0) <= 0) return { ok: false, why: 'empty' };
+    const yaw = fin(m.yaw) ? m.yaw : p.yaw, pitch = clamp(fin(m.pitch) ? m.pitch : 0, -1.1, 0.9);
+    p.nades--; const h = Math.cos(pitch);
+    const g = { id: this.nextN++, x: p.x, y: 1.55, z: p.z, vx: -Math.sin(yaw) * h * NADE_SPEED, vy: Math.sin(pitch) * NADE_SPEED + 2.2, vz: -Math.cos(yaw) * h * NADE_SPEED, fuse: NADE_FUSE, landed: false, by: id };
+    this.nades.set(g.id, g); return { ok: true, nades: p.nades, id: g.id };
+  }
+  nearestNade(z) { let best = null, bd = NADE_LURE; for (const g of this.nades.values()) { if (!g.landed) continue; const d = Math.hypot(g.x - z.x, g.z - z.z); if (d < bd) { bd = d; best = g; } } return best; }
+  stepNades(dt) {
+    for (const g of [...this.nades.values()]) {
+      g.fuse -= dt;
+      if (!g.landed) {
+        const ox = g.x, oz = g.z; g.vy -= 18 * dt; g.x += g.vx * dt; g.y += g.vy * dt; g.z += g.vz * dt; g.vx *= 0.992; g.vz *= 0.992;
+        if (this.world.segBlock({ x: ox, z: oz }, g) !== null) { g.x = ox; g.z = oz; g.vx *= -0.25; g.vz *= -0.25; }
+        if (g.y <= 0.16) { g.y = 0.16; g.landed = true; g.vx = g.vz = g.vy = 0; }
+      }
+      if (g.fuse <= 0) this.boom(g);
+    }
+  }
+  boom(g) {
+    this.nades.delete(g.id); const owner = this.players.get(g.by);
+    for (const z of [...this.zombies.values()]) {
+      const d = Math.hypot(z.x - g.x, z.z - g.z); if (d > NADE_BLAST) continue;
+      z.hp -= 200 * (1 - d / NADE_BLAST) + 50;
+      if (z.hp <= 0) { this.missions.onKill(z); this.zombies.delete(z.id); if (owner) { owner.kills++; this.gain(owner, z.value || 60); } this.events.push({ e: 'kill', z: z.id, by: g.by, head: 0, boom: 1 }); }
+    }
+    for (const p of this.players.values()) { const d = Math.hypot(p.x - g.x, p.z - g.z); if (d < 3.2) this.hurt(p, 55 * (1 - d / 3.2)); }
+    this.events.push({ e: 'boom', id: g.id, x: g.x, z: g.z });
+  }
+  chase(z, dt) {
+    const n = this.nearest(z), lure = this.nearestNade(z);
+    if (!n && !lure) return;
+    const destX = lure ? lure.x : n.p.x, destZ = lure ? lure.z : n.p.z;
+    const zA = areaOf(z.x, z.z, this.mapId), destA = areaOf(destX, destZ, this.mapId);
+    let tx = destX, tz = destZ, portal = null;
+    if (zA !== destA) {
+      portal = portalTarget(z.x, z.z, this.mapId, destA, this.doors, ((z.v || 0) - 1.5) * 0.55);
+      if (!portal) return;
+      tx = portal.x; tz = portal.z;
+    }
+    let sx = 0, sz = 0;
+    for (const o of this.zombies.values()) {
+      if (o === z || o.state === 'dead') continue;
+      const ex = z.x - o.x, ez = z.z - o.z, dd = ex * ex + ez * ez, rad = portal ? 0.5 : 0.72;
+      if (dd < rad * rad && dd > 1e-6) { const dist = Math.sqrt(dd); sx += (ex / dist) * (rad - dist); sz += (ez / dist) * (rad - dist); }
+    }
+    if (portal) { if (portal.crossZ) sx *= 0.12; else sz *= 0.12; }
+    const dx = tx - z.x + sx * 1.15, dz = tz - z.z + sz * 1.15, dl = Math.hypot(dx, dz) || 1;
+    z.yaw = Math.atan2(portal ? dx : destX - z.x, portal ? dz : destZ - z.z); z.cool -= dt;
+    const goal = Math.hypot(destX - z.x, destZ - z.z);
+    const hold = !portal && goal < (lure ? 0.85 : 1.05);
+    if (!hold) { const step = Math.min(Math.hypot(tx - z.x, tz - z.z), z.speed * dt); z.x += (dx / dl) * step; z.z += (dz / dl) * step; this.world.resolve(z, ZR * Math.min(1.15, z.scale || 1)); }
+    this.noteStuck(z, dt, portal, hold);
+    if (!lure && !portal && n && n.d < 1.4 && z.cool <= 0 && this.world.segBlock(z, n.p) === null) { z.cool = 1.05; z.atk = 1; this.hurt(n.p, z.dmg); }
+  }
+  noteStuck(z, dt, portal, hold) {
+    z.chk = (z.chk || 0) + dt; if (z.chk < 0.4) return;
+    const mv = Math.hypot(z.x - (z.chkX ?? z.x), z.z - (z.chkZ ?? z.z));
+    if (!hold && mv < 0.1) {
+      z.stuckTot = (z.stuckTot || 0) + z.chk;
+      if (portal) { const dx = portal.gx - z.x, dz = portal.gz - z.z, d = Math.hypot(dx, dz) || 1; z.x += (dx / d) * 0.3; z.z += (dz / d) * 0.3; this.world.resolve(z, ZR); }
+    } else z.stuckTot = Math.max(0, (z.stuckTot || 0) - z.chk * 0.6);
+    if ((z.stuckTot || 0) > 1.8 && portal) { z.x = portal.ex; z.z = portal.ez; this.world.resolve(z, ZR); z.stuckTot = 0; }
+    z.chkX = z.x; z.chkZ = z.z; z.chk = 0;
+  }
   spawn() { const act = this.activeWins(), w = act[(this.rng() * act.length) | 0], st = zStats(this.round), brute = this.brutes > 0 && this.toSpawn <= this.brutes; const runner = this.round >= 3 && this.rng() < Math.min(0.55, (this.round - 2) * 0.09);
     const d = 4 + this.rng() * 5, side = (this.rng() * 2 - 1) * 3; const z = { id: this.nextZ++, x: w.out.x + w.n.x * d + w.t.x * side, z: w.out.z + w.n.z * d + w.t.z * side, yaw: Math.atan2(-w.n.x, -w.n.z), win: w, state: 'approach', scale: brute ? 1.38 : 0.94 + this.rng() * 0.12, brute, runner, slot: (this.rng() * 2 - 1) * 0.8,
       hp: st.hp * (brute ? 3.3 : 1) * (1 + 0.25 * (this.size - 1)), speed: Math.min(6, st.sp * (0.82 + this.rng() * 0.3) * (runner ? 1.45 : 1) * (brute ? 0.78 : 1)), dmg: brute ? BRUTE_DMG : ZDMG, value: brute ? 150 : 60, t: 0, cool: 0, v: (this.zombies.size + this.nextZ) % 4 };
@@ -130,20 +200,15 @@ class Room {
     }
     if (this.phase === 'wait' || this.phase === 'inter') { this.interT -= dt; if (this.interT <= 0) this.startRound(this.round + 1); }
     else if (this.phase === 'round') { if (this.toSpawn > 0) { this.spawnT -= dt; if (this.spawnT <= 0 && this.zombies.size < this.cap) { this.spawn(); this.spawnT = Math.max(0.3, 2.0 - this.round * 0.13) / Math.max(1, this.size * 0.75); } }
-      if (this.toSpawn <= 0 && this.zombies.size === 0) { this.phase = 'inter'; this.interT = 8; for (const p of this.players.values()) if (p.dead) { p.dead = false; p.hp = PLAYER_HP / 2; this.events.push({ e: 'revive', p: p.id }); } } }
+      if (this.toSpawn <= 0 && this.zombies.size === 0) { const cleared = this.round; this.phase = 'inter'; this.interT = 8; this.missions.onWave(cleared); for (const p of this.players.values()) if (p.dead) { p.dead = false; p.hp = PLAYER_HP / 2; this.events.push({ e: 'revive', p: p.id }); } } }
     for (const w of this.wins) if (w.cool > 0) w.cool -= dt;
+    this.stepNades(dt);
     for (const z of this.zombies.values()) {
       z.t += dt; z.atk = 0; const w = z.win;
       if (z.state === 'approach') { const tx = w.out.x + w.t.x * z.slot, tz = w.out.z + w.t.z * z.slot, dx = tx - z.x, dz = tz - z.z, d = Math.hypot(dx, dz); if (d < 0.3) { z.state = w.count > 0 ? 'breach' : 'climb'; z.t = 0; z.cool = 0.6 + this.rng(); } else { const s = Math.min(d, z.speed * dt); z.x += dx / d * s; z.z += dz / d * s; z.yaw = Math.atan2(dx, dz); } }
       else if (z.state === 'breach') { z.cool -= dt; z.yaw = Math.atan2(-w.n.x, -w.n.z); if (w.count <= 0) { z.state = 'climb'; z.t = 0; } else if (z.cool <= 0) { z.cool = 1.2 + this.rng() * 0.8; z.atk = 1; if (w.cool <= 0) { w.count--; w.cool = 2.2 + this.rng(); this.events.push({ e: 'plank', w: w.id, n: w.count }); } } }
       else if (z.state === 'climb') { const k = Math.min(1, z.t / 1.25); const sx = w.out.x + w.t.x * z.slot, sz = w.out.z + w.t.z * z.slot, ex = w.in.x + w.t.x * z.slot * 0.6, ez = w.in.z + w.t.z * z.slot * 0.6; z.x = sx + (ex - sx) * k; z.z = sz + (ez - sz) * k; z.climb = Math.sin(k * Math.PI) * 0.75; if (k >= 1) { z.state = 'chase'; z.climb = 0; } }
-      else { const n = this.nearest(z); if (!n) continue; let tx = n.p.x, tz = n.p.z;
-        const zA = areaOf(z.x, z.z, this.mapId), pA = areaOf(n.p.x, n.p.z, this.mapId);
-        if (zA !== pA) { const path = route(zA, pA, this.doors); if (!path) continue; if (path.length) { const g = path[0], next = g.areas[0] === zA ? g.areas[1] : g.areas[0]; const through = Math.hypot(z.x - g.x, z.z - g.z) < 1.65; const dest = standOf(g, through ? next : zA); tx = dest.x; tz = dest.z; } }
-        const dx = tx - z.x, dz = tz - z.z, dl = Math.hypot(dx, dz) || 1; z.yaw = Math.atan2(n.p.x - z.x, n.p.z - z.z); z.cool -= dt;
-        if (n.d > 1.0) { const s = Math.min(Math.max(0, dl - 0.9) || z.speed * dt, z.speed * dt); z.x += dx / dl * s; z.z += dz / dl * s; this.world.resolve(z, ZR); }
-        if (n.d < 1.4 && z.cool <= 0 && this.world.segBlock(z, n.p) === null) { z.cool = 1.05; z.atk = 1; this.hurt(n.p, z.dmg); } }
-      for (const o of this.zombies.values()) { if (o === z || o.state !== 'chase' || z.state !== 'chase') continue; const ex = z.x - o.x, ez = z.z - o.z, dd = ex * ex + ez * ez; if (dd < 0.5 && dd > 1e-6) { const q = Math.sqrt(dd); z.x += ex / q * 0.02; z.z += ez / q * 0.02; } }
+      else this.chase(z, dt);
     }
     // crate timer
     const c = this.crate; if (c.state !== 'idle') { c.t += dt; if (c.state === 'roll' && c.t > 3.6) { c.state = 'ready'; c.t = 0; this.events.push({ e: 'crate', s: 'ready', w: c.weapon, by: c.by }); } else if (c.state === 'ready' && c.t > 9) { c.state = 'idle'; c.weapon = null; c.by = null; this.events.push({ e: 'crate', s: 'shut' }); } }
@@ -158,7 +223,8 @@ class Room {
     return { t: 's', time: r(this.time), round: this.round, phase: this.phase, over: this.over, dbl: this.double > 0 ? 1 : 0, door: this.door.open ? 1 : 0, go: this.doors.filter((d) => d.open && d.id !== 'AB').map((d) => d.id), ms: this.phase === 'lobby' ? null : this.missions.snap(), mi: this.missions.items(), mc: this.missions.carried(),
       win: this.wins.map((w) => w.count), crate: [this.crate.state, this.crate.weapon, this.crate.by],
       up: [...this.ups.values()].map((u) => [u.id, u.type, r(u.x), r(u.z)]),
-      p: [...this.players.values()].map((p) => [p.id, p.name, r(p.x), r(p.z), r(p.yaw), r(p.pitch), Math.max(0, Math.round(p.hp)), p.pts, p.kills, p.dead ? 1 : 0, p.connected ? 1 : 0, [...p.owned], Object.entries(p.ammo).map(([id, a]) => [id, a.mag, a.res]), p.ready ? 1 : 0]),
+      ng: [...this.nades.values()].map((g) => [g.id, r(g.x), r(g.y), r(g.z), g.landed ? 1 : 0, r(Math.max(0, g.fuse))]),
+      p: [...this.players.values()].map((p) => [p.id, p.name, r(p.x), r(p.z), r(p.yaw), r(p.pitch), Math.max(0, Math.round(p.hp)), p.pts, p.kills, p.dead ? 1 : 0, p.connected ? 1 : 0, [...p.owned], Object.entries(p.ammo).map(([id, a]) => [id, a.mag, a.res]), p.ready ? 1 : 0, p.held || 'pistol', p.nades || 0]),
       z: [...this.zombies.values()].map((z) => [z.id, r(z.x), r(z.z), r(z.yaw), z.state === 'chase' ? 3 : z.state === 'climb' ? 2 : z.state === 'breach' ? 1 : 0, r(z.climb || 0), z.brute ? 1 : 0, z.runner ? 1 : 0, z.atk, z.v]),
       ev: this.events.splice(0) }; }
 }

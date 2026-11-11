@@ -4,18 +4,46 @@ const { yard } = require('./nav.js');
 const { areaOf } = require('./nav.js');
 const WEAPONS = require('./weapons.js');
 const pack = (id) => { const W = WEAPONS[id]; return W ? { mag: W.mag, res: W.reserve } : null; };
+// One mission becomes live per completed wave. Consecutive offers sit in different lots.
+// Wave 5 unlocks the last two; only one is live, and a finish never starts the next immediately.
+const ORDER = [
+  { id: 'fuel', wave: 1 }, { id: 'carb', wave: 2 }, { id: 'bus', wave: 3 },
+  { id: 'parts', wave: 4 }, { id: 'radio', wave: 5 }, { id: 'clear', wave: 5 },
+];
 
 class Missions {
-  constructor(room) { this.room = room; this.job = null; this.boardAt = new Map(); }
+  constructor(room) { this.room = room; this.job = null; this.boardAt = new Map(); this.unlocked = []; this.done = new Set(); this.gap = false; this.gapWave = 0; this.lastArea = ''; this.waves = 0; }
   begin(i) {
     if (i >= yard.jobs.length) { this.job = null; return; }
     const def = yard.jobs[i];
     this.job = { index: i, id: def.id, title: def.title, kind: def.kind, gate: def.gate || '', area: def.area, need: def.need, pts: def.pts, power: def.power || '', pad: { ...def.pad }, have: 0, items: (def.items || []).map((it) => ({ id: it.id, x: it.x, z: it.z, done: false, carried: null })), carry: {} };
   }
+  onWave(n) {
+    if (this.room.mapId !== 'junkyard') return false;
+    this.waves = Math.max(this.waves, n | 0);
+    for (const row of ORDER) if (row.wave <= this.waves && !this.unlocked.includes(row.id)) this.unlocked.push(row.id);
+    if (this.gap) {
+      const next = ORDER.find((row) => this.unlocked.includes(row.id) && !this.done.has(row.id));
+      const area = next && (yard.jobs.find((j) => j.id === next.id) || {}).area;
+      const same = !!(area && area === this.lastArea);
+      const cleared = same ? this.waves > this.gapWave : this.waves >= this.gapWave;
+      if (cleared) this.gap = false;
+    }
+    if (!this.tryStart()) return false;
+    this.room.events.push({ e: 'mission', start: 1, id: this.job.id });
+    return true;
+  }
+  tryStart() {
+    if (this.job || this.gap || this.room.mapId !== 'junkyard') return false;
+    const next = ORDER.find((row) => this.unlocked.includes(row.id) && !this.done.has(row.id));
+    if (!next) return false;
+    const i = yard.jobs.findIndex((j) => j.id === next.id);
+    this.begin(i);
+    return !!this.job;
+  }
   price(g) { const j = this.job; if (j && j.gate && j.gate === g.id) return Math.floor(g.price * yard.discount); return g.price; }
   step(dt) {
     const room = this.room; if (room.mapId !== 'junkyard' || room.phase === 'lobby' || room.over) return;
-    if (!this.job) this.begin(0);
     const j = this.job; if (!j) return;
     const players = [...room.players.values()].filter((p) => p.connected && !p.dead);
     if (j.kind === 'carry') {
@@ -74,11 +102,11 @@ class Missions {
     for (const pl of room.players.values()) if (!pl.dead) for (const id of pl.owned) { const a = pack(id); if (a) pl.ammo[id] = a; }
     if (j.power) room.drop(j.power, j.pad.x, j.pad.z);
     if (j.gate) room.openGate(j.gate, p && p.id, true);
+    this.done.add(j.id); this.lastArea = j.area; this.gap = true; this.gapWave = room.round; this.job = null;
     room.events.push({ e: 'mission', id: j.id, gate: j.gate || '', power: j.power || '', pts: j.pts });
-    this.begin(j.index + 1);
   }
   snap() { const j = this.job; if (!j) return null; return [j.id, Math.floor(j.have), j.need, j.pad.x, j.pad.z]; }
   items() { const j = this.job; if (!j) return []; return j.items.filter((it) => !it.done && !it.carried).map((it) => [it.id, Math.round(it.x * 100) / 100, Math.round(it.z * 100) / 100]); }
   carried() { const j = this.job; if (!j) return []; return Object.entries(j.carry).map(([pid, id]) => [pid, id]); }
 }
-module.exports = { Missions };
+module.exports = { Missions, ORDER };

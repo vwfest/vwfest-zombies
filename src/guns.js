@@ -74,17 +74,63 @@ const BUILD = {
     ext(g, [[0.04, -0.01], [0.08, -0.01], [0.1, -0.12], [0.065, -0.125]], 0.034, M.poly, { bevel: 0.004 }); trigger(g, 0.01, -0.02, M); ext(g, [[0.12, 0.05], [0.4, 0.04], [0.4, -0.08], [0.36, -0.09], [0.12, -0.01]], 0.05, M.poly, { bevel: 0.007 });
     sights(g, -0.66, 0.08, 0.093, M); for (const s of [-1, 1]) { const b = tube(g, 0.005, 0.18, s * 0.03, -0.05, -0.62, M.steel, 8); b.rotation.x = Math.PI / 2 + 0.35; }
     return { muzzle: -0.76, eject: -0.02, pos: [0.2, -0.21, -0.4], lz: -0.3 }; },
+  akimbo(g, M) {
+    const L = new THREE.Group(); L.position.set(-0.12, -0.01, 0.02); L.rotation.y = 0.22; L.rotation.z = 0.08;
+    const R = new THREE.Group(); R.position.set(0.12, -0.01, 0); R.rotation.y = -0.12; R.rotation.z = -0.04;
+    g.add(L, R);
+    const a = BUILD.pistol(L, M), b = BUILD.pistol(R, M);
+    const mL = new THREE.Object3D(); mL.position.set(0, 0.012, a.muzzle); L.add(mL);
+    const mR = new THREE.Object3D(); mR.position.set(0, 0.012, b.muzzle); R.add(mR);
+    rbox(L, 0.048, 0.04, 0.07, 0.01, -0.09, 0.01, M.glove, 0.012);
+    rbox(R, 0.048, 0.04, 0.07, -0.01, -0.09, 0.0, M.glove, 0.012);
+    const sleeveL = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.04, 0.28, 12), M.sleeve); sleeveL.rotation.set(Math.PI / 2, 0.4, 0.2); sleeveL.position.set(-0.08, -0.16, 0.16); g.add(sleeveL);
+    const sleeveR = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.04, 0.28, 12), M.sleeve); sleeveR.rotation.set(Math.PI / 2, -0.2, -0.15); sleeveR.position.set(0.08, -0.16, 0.16); g.add(sleeveR);
+    return { muzzle: b.muzzle, eject: -0.04, pos: [0.0, -0.16, -0.36], lz: 0, akimbo: true, muzzles: [mL, mR], slides: [L.userData.slide, R.userData.slide] };
+  },
+  lever(g, M) {
+    tube(g, 0.011, 0.62, 0, 0.03, -0.42, M.blued, 18);
+    tube(g, 0.016, 0.18, 0, 0.012, -0.22, M.steel, 16);
+    ext(g, [[0.02, 0.02], [0.28, 0.015], [0.3, -0.08], [0.24, -0.09], [0.06, -0.01]], 0.04, M.wood, { bevel: 0.006 });
+    rbox(g, 0.038, 0.12, 0.016, 0, -0.02, 0.29, M.poly, 0.004);
+    const lever = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.004, 6, 16, Math.PI), M.steel); lever.rotation.set(0, Math.PI / 2, Math.PI); lever.position.set(0, -0.04, 0.02); g.add(lever); g.userData.pump = lever;
+    sights(g, -0.7, 0.02, 0.045, M); tube(g, 0.008, 0.04, 0, 0.03, -0.74, M.blued, 12);
+    rbox(g, 0.03, 0.05, 0.04, 0, -0.02, 0.04, M.wood, 0.004);
+    return { muzzle: -0.76, eject: 0.0, pos: [0.18, -0.18, -0.42], lz: -0.28 };
+  },
+  nailer(g, M) {
+    rbox(g, 0.09, 0.11, 0.22, 0, 0, -0.02, M.park, 0.008);
+    rbox(g, 0.07, 0.06, 0.16, 0, -0.02, 0.12, M.polyTan, 0.006);
+    tube(g, 0.012, 0.16, 0, 0.01, -0.2, M.steel, 14);
+    tube(g, 0.02, 0.04, 0, 0.01, -0.28, M.blued, 12);
+    for (let i = 0; i < 5; i++) rbox(g, 0.004, 0.012, 0.05, 0.048, 0.02 - i * 0.012, -0.02, M.brass, 0.001);
+    const hose = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.006, 6, 14), M.poly); hose.rotation.x = Math.PI / 2; hose.position.set(0.02, -0.02, 0.2); g.add(hose);
+    rbox(g, 0.035, 0.08, 0.04, 0, -0.08, 0.02, M.poly, 0.004, 0.3);
+    const tip = tube(g, 0.004, 0.02, 0, 0.01, -0.31, M.dot, 8);
+    tip.material = M.dot;
+    return { muzzle: -0.32, eject: -0.02, pos: [0.2, -0.18, -0.36], lz: -0.08 };
+  },
+  sawed(g, M) {
+    tube(g, 0.014, 0.28, 0.012, 0.02, -0.16, M.blued, 16);
+    tube(g, 0.014, 0.28, -0.012, 0.02, -0.16, M.blued, 16);
+    rbox(g, 0.05, 0.04, 0.08, 0, 0.0, -0.02, M.steel, 0.004);
+    ext(g, [[0.0, 0.0], [0.02, -0.02], [0.05, -0.12], [0.02, -0.13], [-0.01, -0.02]], 0.032, M.wood, { bevel: 0.005 });
+    rbox(g, 0.02, 0.03, 0.02, 0.03, 0.03, 0.0, M.steel, 0.002);
+    const bead = new THREE.Mesh(new THREE.SphereGeometry(0.004, 8, 6), M.brass); bead.position.set(0, 0.04, -0.3); g.add(bead);
+    return { muzzle: -0.31, eject: -0.02, pos: [0.18, -0.16, -0.34], lz: -0.02 };
+  },
 };
 // stylised star flash (3 crossed additive quads), procedurally drawn
 let FLASH; function flashMat() { if (FLASH) return FLASH; const t = canvas(128, (x, n) => { const c = n / 2; const g = x.createRadialGradient(c, c, 0, c, c, c); g.addColorStop(0, 'rgba(255,250,230,1)'); g.addColorStop(0.25, 'rgba(255,190,90,0.9)'); g.addColorStop(1, 'rgba(255,90,20,0)'); x.fillStyle = g; for (let i = 0; i < 7; i++) { x.save(); x.translate(c, c); x.rotate(i / 7 * 6.283 + R(-0.2, 0.2)); x.beginPath(); x.moveTo(0, -6); x.lineTo(c * R(0.7, 1), 0); x.lineTo(0, 6); x.fill(); x.restore(); } x.beginPath(); x.arc(c, c, c * 0.35, 0, 7); x.fill(); });
   t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; return (FLASH = new THREE.MeshBasicMaterial({ map: t, color: new THREE.Color(3, 2.2, 1.2), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false })); }
 export function buildViewmodelHD(id, hands = true) { const M = mats(), g = new THREE.Group(); const spec = (BUILD[id] || BUILD.rifle)(g, M);
   if (!hands) { const m0 = new THREE.Object3D(); g.userData = { muzzle: m0, eject: m0, base: new THREE.Vector3() }; return g; }
-  rbox(g, 0.05, 0.08, 0.075, 0, -0.065, 0.035, M.glove, 0.018).rotation.x = 0.25; for (let i = 0; i < 3; i++) rbox(g, 0.052, 0.016, 0.03, 0.002, -0.04 - i * 0.02, 0.0, M.glove, 0.007);
-  const ra = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.042, 0.32, 16), M.sleeve); ra.rotation.x = Math.PI / 2 - 0.25; ra.position.set(0.02, -0.13, 0.22); g.add(ra);
-  const lh = rbox(g, 0.055, 0.05, 0.09, id === 'pistol' ? -0.018 : -0.028, id === 'pistol' ? -0.07 : -0.03, spec.lz, M.glove, 0.016); const la = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.042, 0.34, 16), M.sleeve); la.rotation.set(Math.PI / 2 - 0.1, 0.35, 0); la.position.set(-0.1, -0.12, spec.lz + 0.22); g.add(la);
+  if (!spec.akimbo) {
+    rbox(g, 0.05, 0.08, 0.075, 0, -0.065, 0.035, M.glove, 0.018).rotation.x = 0.25; for (let i = 0; i < 3; i++) rbox(g, 0.052, 0.016, 0.03, 0.002, -0.04 - i * 0.02, 0.0, M.glove, 0.007);
+    const ra = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.042, 0.32, 16), M.sleeve); ra.rotation.x = Math.PI / 2 - 0.25; ra.position.set(0.02, -0.13, 0.22); g.add(ra);
+    const lh = rbox(g, 0.055, 0.05, 0.09, id === 'pistol' ? -0.018 : -0.028, id === 'pistol' ? -0.07 : -0.03, spec.lz, M.glove, 0.016); const la = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.042, 0.34, 16), M.sleeve); la.rotation.set(Math.PI / 2 - 0.1, 0.35, 0); la.position.set(-0.1, -0.12, spec.lz + 0.22); g.add(la);
+  }
   g.traverse((o) => { if (o.isMesh) o.castShadow = false; });
   const muzzle = new THREE.Object3D(); muzzle.position.set(0, id === 'pistol' ? 0.012 : 0.022, spec.muzzle); g.add(muzzle); const eject = new THREE.Object3D(); eject.position.set(0.04, 0.03, spec.eject); g.add(eject);
   const flash = new THREE.Group(); const fm = flashMat(); for (let i = 0; i < 2; i++) { const q = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 0.16), fm); q.rotation.set(Math.PI / 2, i * Math.PI / 2, 0); q.position.z = -0.07; flash.add(q); } const fr = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.12), fm); flash.add(fr); flash.position.copy(muzzle.position); flash.visible = false; g.add(flash);
   let tris = 0; g.traverse((o) => { if (o.isMesh) tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; });
-  g.userData = { muzzle, eject, flash, slide: g.userData.slide, pump: g.userData.pump, base: new THREE.Vector3(...spec.pos), tris: Math.round(tris) }; g.userData.base.z -= 0.1; g.userData.base.x -= 0.03; g.position.copy(g.userData.base); g.scale.setScalar(0.9); return g; }
+  g.userData = { muzzle, eject, flash, slide: g.userData.slide, slides: spec.slides || null, muzzles: spec.muzzles || null, pump: g.userData.pump, base: new THREE.Vector3(...spec.pos), tris: Math.round(tris) }; g.userData.base.z -= 0.1; g.userData.base.x -= 0.03; g.position.copy(g.userData.base); g.scale.setScalar(0.9); return g; }

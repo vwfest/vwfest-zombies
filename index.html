@@ -25,7 +25,7 @@
 <div id="hud" class="hidden">
   <div id="roundBox" class="glass"><span class="lbl">ROUND</span><b id="roundNum">1</b></div>
   <div id="powers"></div>
-  <div id="topRight"><button id="btnVoice" class="icon hidden" aria-label="Join voice">🎤</button><button id="btnMute" class="icon" aria-label="Mute">🔊</button><button id="btnFull" class="icon fsbtn" aria-label="Fullscreen landscape">⛶</button><button id="btnPause" class="icon" aria-label="Pause">❚❚</button></div>
+  <div id="topRight"><button id="btnVoice" class="icon hidden" aria-label="Join voice">🎤</button><button id="btnMusic" class="icon on" aria-label="Music">♪</button><button id="btnMute" class="icon" aria-label="Mute">🔊</button><button id="btnFull" class="icon fsbtn" aria-label="Fullscreen landscape">⛶</button><button id="btnPause" class="icon" aria-label="Pause">❚❚</button></div>
   <div id="cross"><i class="l"></i><i class="r"></i><i class="u"></i><i class="d"></i><i class="dot"></i><div id="hitm"><i></i><i></i><i></i><i></i></div></div>
   <div id="prompt" class="glass"></div>
   <div id="banner"></div>
@@ -37,7 +37,7 @@
   <div id="specTag" class="glass hidden"></div>
   <div id="pop"></div>
   <div id="statL" class="glass"><div class="hp"><span class="hpl"><span>HEALTH</span><b id="hpNum">200</b></span><div class="bar"><i id="hpFill"></i></div><div id="medCue">✚ Med kit drops on your next kill</div></div><div class="pts"><span>POINTS</span><b id="pts">500</b></div></div>
-  <div id="statR" class="glass"><div id="wName">Dustdevil .45</div><div class="ammo"><b id="ammoMag">12</b><span id="ammoRes">/ 60</span></div><div id="wAlt"></div><div id="reloadBar"><i></i></div></div>
+  <div id="statR" class="glass"><div id="wName">Dustdevil .45</div><div class="ammo"><b id="ammoMag">12</b><span id="ammoRes">/ 60</span></div><div id="nadeCnt">BAIT 1</div><div id="wAlt"></div><div id="reloadBar"><i></i></div></div>
 </div>
 
 <div id="touch" class="hidden">
@@ -47,6 +47,7 @@
   <button id="bUse" aria-label="Interact">E</button>
   <button id="bSwap" aria-label="Swap weapon">⇄</button>
   <button id="bLamp" aria-label="Flashlight">🔦</button>
+  <button id="bNade" aria-label="Blood bait">💣</button>
 </div>
 
 <section id="menu" class="screen">
@@ -65,7 +66,7 @@
     <div class="row coop" id="coop"><span class="k">CO-OP <em>beta</em></span><input id="coName" maxlength="16" placeholder="Nickname" autocomplete="off"><button id="coQuick" class="ghost">Quick match</button><button id="coCreate" class="ghost">Create room</button><input id="coCode" maxlength="5" placeholder="CODE" autocomplete="off"><button id="coJoin" class="ghost">Join</button></div>
     <p id="coMsg" class="coMsg"></p>
     <div class="cols">
-      <div class="how" id="howDesk"><h3>CONTROLS</h3><ul><li><kbd>W A S D</kbd> move · <kbd>Shift</kbd> sprint</li><li><kbd>Mouse</kbd> aim · <kbd>Click</kbd> fire</li><li><kbd>R</kbd> reload · <kbd>E</kbd> buy / repair (hold)</li><li><kbd>1</kbd> <kbd>2</kbd> <kbd>Q</kbd> swap · <kbd>F</kbd> flashlight</li><li><kbd>V</kbd> co-op voice · <kbd>M</kbd> mute · <kbd>Esc</kbd> pause</li></ul></div>
+      <div class="how" id="howDesk"><h3>CONTROLS</h3><ul><li><kbd>W A S D</kbd> move · <kbd>Shift</kbd> sprint</li><li><kbd>Mouse</kbd> aim · <kbd>Click</kbd> fire</li><li><kbd>R</kbd> reload · <kbd>E</kbd> buy / repair (hold)</li><li><kbd>1</kbd> <kbd>2</kbd> <kbd>Q</kbd> swap · <kbd>F</kbd> flashlight</li><li><kbd>G</kbd> blood bait · <kbd>N</kbd> music · <kbd>V</kbd> voice · <kbd>M</kbd> mute</li></ul></div>
       <div class="how" id="howTouch"><h3>TOUCH</h3><ul><li>Left thumb: move stick</li><li>Right side: drag to look</li><li>Big button fire · <b>R</b> reload · <b>E</b> use · ⇄ swap · lamp light</li><li>Landscape works best</li></ul></div>
       <div class="how"><h3>TIPS</h3><ul><li>Hold <b>E</b> at a window to nail planks back</li><li>Headshots pay double</li><li>Open the gate for new guns. Objectives unlock the side lots</li><li>Gather drops: <b>2× Cash</b>, <b>Full Mags</b>, <b>Kaboom</b></li></ul></div>
       <div class="how scores"><h3>BEST ROUNDS</h3><ol id="scoreList"></ol></div>
