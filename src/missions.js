@@ -1,6 +1,7 @@
 // Wave objectives. Single-player runs them locally. Co-op only renders the server snapshot.
 import * as THREE from 'three';
 import { YARD, areaOf } from './nav.js';
+import { createMissionUI, nextUnlock, COPY } from './ui/missionui.js';
 
 const $ = (id) => document.getElementById(id);
 const ORDER = [
@@ -28,15 +29,9 @@ function detail(s, pid) {
 export function createMissions(ctx) {
   const { world, P, G, sfx, banner, toast, popText, spawnPower } = ctx;
   const state = { mode: 'sp', job: null, pid: 'you', unlocked: [], done: new Set(), gap: false, gapWave: 0, lastArea: '', waves: 0 };
-  const beacon = new THREE.Group();
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 7, 5), new THREE.MeshBasicMaterial({ color: 0xffd36b, transparent: true, opacity: 0.9, depthWrite: false }));
-  pole.position.y = 3.5; pole.userData.noAO = true;
-  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: world.T && world.T.glow, color: new THREE.Color(3, 2.1, 0.4), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false }));
-  glow.scale.setScalar(1.6); glow.position.y = 6.6; glow.userData.noAO = true;
-  beacon.add(pole, glow); beacon.visible = false; world.scene.add(beacon);
-  const arrow = $('objArrow');
-  const hud = $('mission');
-  const _v = new THREE.Vector3();
+  const ui = createMissionUI({ world, isTouch: document.body.classList.contains('touch') });
+  const phase = () => (ctx.phase ? ctx.phase() : G.phase);
+  const itemName = (s) => (COPY[s.id] && COPY[s.id].item) || 'item';
 
   function syncMeshes() {
     const live = new Set();
@@ -70,7 +65,7 @@ export function createMissions(ctx) {
       if (same ? state.waves > state.gapWave : state.waves >= state.gapWave) state.gap = false;
     }
     if (!tryStart()) return false;
-    banner('NEW MISSION AVAILABLE', state.job.title);
+    ui.start(state.job.id);
     sfx.announce?.(sfx.lineFor?.('mission', state.job.id, G.round));
     return true;
   }
@@ -82,7 +77,7 @@ export function createMissions(ctx) {
     P.pts += pts;
     for (const sl of P.slots) if (sl && ctx.weapons[sl.id]) { sl.mag = ctx.weapons[sl.id].mag; sl.reserve = ctx.weapons[sl.id].reserve; }
     if (s.power) spawnPower(s.power, s.pad.x, s.pad.z);
-    popText('+' + pts); banner(s.title.toUpperCase(), g ? g.blurb : 'Objective complete'); sfx.cash(); if (g) sfx.door();
+    popText('+' + pts); ui.complete(s.id, { pts, next: nextUnlock(s.id, G.round, G.phase) }); sfx.cash(); if (g) sfx.door();
     sfx.announce?.(sfx.lineFor?.('done', s.id, G.round));
     state.done.add(s.id); state.lastArea = s.area; state.gap = true; state.gapWave = G.round; state.job = null; syncMeshes();
   }
@@ -93,7 +88,7 @@ export function createMissions(ctx) {
     if (s.kind === 'carry' && !s.carry.you) {
       let best = null, bd = YARD.pickup;
       for (const it of s.items) if (!it.done && !it.carried) { const d = Math.hypot(P.x - it.x, P.z - it.z); if (d <= bd) { bd = d; best = it; } }
-      if (best) { best.carried = 'you'; s.carry.you = best.id; sfx.click(0, 880, 0.28); }
+      if (best) { best.carried = 'you'; s.carry.you = best.id; sfx.click(0, 880, 0.28); toast(`Picked up ${itemName(s)}` + (s.need > 1 ? ` (${s.have + 1}/${s.need})` : '')); }
     } else if (s.kind === 'radio' && G.phase === 'round') {
       const inside = Math.hypot(P.x - s.pad.x, P.z - s.pad.z) <= YARD.radio;
       s.have = inside ? s.have + dt : Math.max(0, s.have - dt * YARD.decay);
@@ -109,14 +104,14 @@ export function createMissions(ctx) {
       const it = s.items.find((q) => q.id === s.carry.you);
       if (it) { it.done = true; it.carried = null; }
       delete s.carry.you; s.have++; sfx.repair();
-      if (s.have >= s.need) finish(); else syncMeshes();
+      if (s.have >= s.need) finish(); else { syncMeshes(); toast(`Delivered ${itemName(s)} (${s.have}/${s.need})`); }
       return true;
     }
     if (s.kind === 'board') {
       const spot = s.items.find((it) => !it.done && Math.hypot(P.x - it.x, P.z - it.z) <= YARD.board);
       if (!spot) return false;
       spot.done = true; s.have++; sfx.repair();
-      if (s.have >= s.need) finish(); else syncMeshes();
+      if (s.have >= s.need) finish(); else { syncMeshes(); toast(`Window boarded (${s.have}/${s.need})`); }
       return true;
     }
     return false;
@@ -135,6 +130,7 @@ export function createMissions(ctx) {
   }
   function applyNet(ms, mi, mc, pid) {
     state.mode = 'net'; state.pid = pid || state.pid;
+    const prevJob = state.job, had = !!(prevJob && prevJob.carry && prevJob.carry[state.pid]);
     if (!ms) { state.job = null; syncMeshes(); return; }
     const def = YARD.jobs.find((j) => j.id === ms[0]);
     if (!def) { state.job = null; syncMeshes(); return; }
@@ -142,13 +138,15 @@ export function createMissions(ctx) {
     for (const row of mc || []) carry[row[0]] = row[1];
     const carriedIds = new Set(Object.values(carry));
     state.job = { index: YARD.jobs.indexOf(def), id: def.id, title: def.title, kind: def.kind, gate: def.gate || '', area: def.area, need: ms[2], pts: def.pts, power: def.power || '', pad: { x: ms[3], z: ms[4] }, have: ms[1], carry, items: (mi || []).filter((row) => !carriedIds.has(row[0])).map((row) => ({ id: row[0], x: row[1], z: row[2], done: false, carried: null })) };
+    if (prevJob && prevJob.id === def.id && !had && carry[state.pid]) toast(`Picked up ${itemName(state.job)}` + (state.job.need > 1 ? ` (${state.job.have + 1}/${state.job.need})` : ''));
+    else if (prevJob && prevJob.id === def.id && state.job.kind !== 'radio' && state.job.have > prevJob.have && state.job.have < state.job.need) toast(`${state.job.kind === 'clear' ? 'Lot D kills' : state.job.kind === 'board' ? 'Window boarded' : 'Delivered ' + itemName(state.job)} (${state.job.have}/${state.job.need})`);
     syncMeshes();
   }
   function onNetEvent(e) {
     if (!e || e.e !== 'mission') return;
     const def = YARD.jobs.find((j) => j.id === e.id);
-    if (e.start) { banner('NEW MISSION AVAILABLE', def ? def.title : ''); sfx.announce?.(sfx.lineFor?.('mission', e.id, G.round)); return; }
-    banner((def ? def.title : 'OBJECTIVE').toUpperCase(), def && def.gate ? 'Gate open' : 'Objective complete');
+    if (e.start) { ui.start(e.id); sfx.announce?.(sfx.lineFor?.('mission', e.id, G.round)); return; }
+    ui.complete(e.id, { pts: e.pts, next: nextUnlock(e.id, G.round, phase()) });
     sfx.announce?.(sfx.lineFor?.('done', e.id, G.round));
     sfx.cash(); if (def && def.gate) sfx.door();
     for (const sl of P.slots) if (sl && ctx.weapons[sl.id]) { sl.mag = ctx.weapons[sl.id].mag; sl.reserve = ctx.weapons[sl.id].reserve; }
@@ -179,29 +177,9 @@ export function createMissions(ctx) {
     return best || s.pad;
   }
   function frame(cam) {
-    const playing = G.state === 'playing' && state.job;
-    if (hud) hud.classList.toggle('hidden', !playing);
-    if (!playing) { beacon.visible = false; if (arrow) arrow.classList.add('hidden'); world.marker = null; return; }
-    const s = state.job, m = marker();
-    $('msTitle').textContent = s.title;
-    $('msDetail').textContent = detail(s, state.pid);
-    $('msCount').textContent = Math.min(s.need, Math.floor(s.have)) + '/' + s.need;
-    const bar = $('msBar'); if (bar) bar.style.width = Math.max(0, Math.min(100, (s.have / s.need) * 100)) + '%';
-    world.marker = m;
-    beacon.visible = true; beacon.position.set(m.x, 0, m.z); glow.position.y = 6.2 + Math.sin(G.time * 3) * 0.25;
-    if (!arrow || !cam) return;
-    _v.set(m.x, 2.2, m.z).project(cam);
-    const behind = _v.z > 1;
-    let nx = behind ? -_v.x : _v.x, ny = behind ? -_v.y : _v.y;
-    const ax = (nx * 0.5 + 0.5) * innerWidth, ay = (-ny * 0.5 + 0.5) * innerHeight;
-    const onScreen = !behind && ax > 48 && ax < innerWidth - 48 && ay > 48 && ay < innerHeight - 48;
-    if (onScreen) { arrow.classList.add('hidden'); return; }
-    const ang = Math.atan2(ay - innerHeight / 2, ax - innerWidth / 2);
-    const cx = innerWidth / 2 + Math.cos(ang) * Math.min(innerWidth, innerHeight) * 0.38;
-    const cy = innerHeight / 2 + Math.sin(ang) * Math.min(innerWidth, innerHeight) * 0.38;
-    arrow.classList.remove('hidden');
-    arrow.style.left = cx + 'px'; arrow.style.top = cy + 'px';
-    arrow.style.transform = `translate(-50%,-50%) rotate(${ang + Math.PI / 4}rad)`;
+    const playing = G.state === 'playing' && state.job && world.mapId === 'junkyard';
+    if (!playing) { ui.hide(); world.marker = null; return; }
+    world.marker = ui.frame(state.job, { pid: state.pid, P, phase: phase(), doors: world.doors, cam, time: G.time, price }) || marker();
   }
   reset();
   return { reset, update, use, onKill, drop, applyNet, onNetEvent, onWave, focus, price, frame, get job() { return state.job; } };

@@ -121,7 +121,7 @@ function adapt(raw) {
 const hud = { hp: -1, pts: -1, mag: -1, res: -1, name: '', prompt: '', round: -1, alt: '', lobby: false };
 let toastT = 0;
 function toast(t) { const e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => e.classList.remove('on'), 2600); }
-function banner(t, sub = '') { const e = $('banner'); e.innerHTML = t + (sub ? `<small>${sub}</small>` : ''); e.classList.remove('on'); void e.offsetWidth; e.classList.add('on'); }
+function banner(t, sub = '') { const wait = +(document.body.dataset.mban || 0) - performance.now(); if (wait > 0) { setTimeout(() => banner(t, sub), wait); return; } const e = $('banner'); e.innerHTML = t + (sub ? `<small>${sub}</small>` : ''); e.classList.remove('on'); void e.offsetWidth; e.classList.add('on'); }
 function popText(txt, head, big) { const e = document.createElement('span'); e.textContent = txt; if (head === 'heal') e.className = 'g'; else if (head) e.className = 'h'; e.style.setProperty('--x', rnd(-80, 80) + 'px'); e.style.top = rnd(10, 50) + 'px'; $('pop').appendChild(e); setTimeout(() => e.remove(), 950); }
 function updateHUD() {
   const hp = Math.max(0, Math.round(P.hp)); if (hp !== hud.hp) { hud.hp = hp; $('hpFill').style.width = (100 * hp / P.maxHp) + '%'; $('hpFill').classList.toggle('low', hp < P.maxHp * LOW_HP_FRAC); $('hpNum').textContent = hp; }
@@ -220,7 +220,7 @@ function pickPower(u) {
   scene.remove(u.g); fx.glowBurst(new THREE.Vector3(u.x, 1, u.z), ...PW[u.type].col.map((v) => v * 0.7), 24, 4);
 }
 
-missions = createMissions({ world, P, G, sfx, banner, toast, popText, spawnPower, weapons: WEAPONS });
+missions = createMissions({ world, P, G, sfx, banner, toast, popText, spawnPower, weapons: WEAPONS, phase: () => (MP?.on ? G.mpPhase : G.phase) });
 
 /* ---------------- crate ---------------- */
 const previews = {}; function preview(id) { if (!previews[id]) { const g = buildViewmodel(id, false); g.scale.setScalar(1.6); g.rotation.y = 0; g.visible = false; world.crate.hold.add(g); previews[id] = g; } return previews[id]; }
