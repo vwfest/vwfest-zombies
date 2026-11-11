@@ -95,7 +95,7 @@ async function run(b, name, mobile, quality) {
   // ---- crate
   await p.evaluate(() => { const g = __game, c = g.world.crate; g.P.x = c.x + 1.4; g.P.z = c.z + 0.6; g.P.pts = 3000; g.tick(0.02); }); await p.evaluate(() => { __game.input.interactEdge = true; __game.input.interact = true; }); await sim(p, 2); await p.evaluate(() => (__game.input.interact = false)); await sim(p, 90);
   ok(await p.evaluate(() => __game.world.crate.state === 'ready'), 'mystery crate rolls a weapon'); await p.evaluate(() => { __game.input.interactEdge = true; __game.input.interact = true; }); await sim(p, 2); await p.evaluate(() => (__game.input.interact = false));
-  const cr = await p.evaluate(() => __game.P.slots.map((s) => s && s.id)); ok(cr.length === 2 && cr.every(Boolean) && cr.some((i) => ['smg', 'shotgun', 'rifle', 'lmg'].includes(i)), 'crate weapon taken → ' + cr.join('/'));
+  const cr = await p.evaluate(() => __game.P.slots.map((s) => s && s.id)); ok(cr.length === 2 && cr.every(Boolean) && cr.some((i) => ['smg', 'shotgun', 'rifle', 'lmg', 'sawed', 'lever'].includes(i)), 'crate weapon taken → ' + cr.join('/'));
   // ---- power-ups
   await p.evaluate(() => { const g = __game; g.P.x = 0; g.P.z = 10; g.G.double = 0; g.spawnPower('double', 0, 10); g.tick(0.05); }); ok(await p.evaluate(() => __game.G.double > 20), '2× Cash power-up works');
   await p.evaluate(() => { const g = __game; g.spawnPower('ammo', 0, 10); g.P.slots[0].reserve = 3; g.tick(0.05); }); ok(await p.evaluate(() => __game.P.slots[0].reserve === __game.WEAPONS[__game.P.slots[0].id].reserve), 'Full Mags power-up refills ammo');
