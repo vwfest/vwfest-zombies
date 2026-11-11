@@ -3,6 +3,8 @@
 const { yard } = require('./nav.js');
 const { areaOf } = require('./nav.js');
 const WEAPONS = require('./weapons.js');
+// Zombies attacking a lot's windows stand outside its fence, so also credit kills near that lot's own windows.
+const inArea = (z, x, zz, area, mapId) => areaOf(x, zz, mapId) === area || !!(z.win && z.win.area === area && Math.hypot(x - z.win.c.x, zz - z.win.c.z) < 12);
 const pack = (id) => { const W = WEAPONS[id]; return W ? { mag: W.mag, res: W.reserve } : null; };
 // One mission becomes live per completed wave. Consecutive offers sit in different lots.
 // Wave 5 unlocks the last two; only one is live, and a finish never starts the next immediately.
@@ -16,7 +18,7 @@ class Missions {
   begin(i) {
     if (i >= yard.jobs.length) { this.job = null; return; }
     const def = yard.jobs[i];
-    this.job = { index: i, id: def.id, title: def.title, kind: def.kind, gate: def.gate || '', area: def.area, need: def.need, pts: def.pts, power: def.power || '', pad: { ...def.pad }, have: 0, items: (def.items || []).map((it) => ({ id: it.id, x: it.x, z: it.z, done: false, carried: null })), carry: {} };
+    this.job = { index: i, id: def.id, title: def.title, kind: def.kind, gate: def.gate || '', area: def.area, need: def.need, pts: def.pts, power: def.power || '', pad: { ...def.pad }, have: 0, items: (def.items || []).map((it) => ({ id: it.id, x: it.x, z: it.z, ox: it.x, oz: it.z, done: false, carried: null })), carry: {} };
   }
   onWave(n) {
     if (this.room.mapId !== 'junkyard') return false;
@@ -45,6 +47,14 @@ class Missions {
   step(dt) {
     const room = this.room; if (room.mapId !== 'junkyard' || room.phase === 'lobby' || room.over) return;
     const j = this.job; if (!j) return;
+    // A carrier who quit, reloaded, or lost connection must not take the item with them: put it back
+    // where they were (or at its start spot if they are gone), otherwise the job can never finish.
+    for (const [pid, id] of Object.entries(j.carry)) {
+      const p = room.players.get(pid); if (p && p.connected) continue;
+      const it = j.items.find((q) => q.id === id);
+      if (it && !it.done) { it.x = p ? p.x : it.ox; it.z = p ? p.z : it.oz; it.carried = null; }
+      delete j.carry[pid];
+    }
     const players = [...room.players.values()].filter((p) => p.connected && !p.dead);
     if (j.kind === 'carry') {
       for (const p of players) {
@@ -86,8 +96,15 @@ class Missions {
   }
   onKill(z) {
     const j = this.job; if (!j || j.kind !== 'clear' || !z) return;
-    if (areaOf(z.x, z.z, this.room.mapId) !== j.area) return;
+    if (!inArea(z, z.x, z.z, j.area, this.room.mapId)) return;
     j.have++; if (j.have >= j.need) this.finish();
+  }
+  // A carrier removed from the room returns their item to its start spot so the job stays finishable.
+  release(pid) {
+    const j = this.job; if (!j || !j.carry[pid]) return;
+    const it = j.items.find((q) => q.id === j.carry[pid]);
+    if (it && !it.done) { it.x = it.ox; it.z = it.oz; it.carried = null; }
+    delete j.carry[pid];
   }
   drop(p) {
     const j = this.job; if (!j || !p || !j.carry[p.id]) return;

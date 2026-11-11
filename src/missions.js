@@ -123,7 +123,8 @@ export function createMissions(ctx) {
   }
   function onKill(z) {
     if (state.mode !== 'sp' || !state.job || state.job.kind !== 'clear' || !z) return;
-    if (areaOf(z.pos.x, z.pos.z, world.mapId) !== state.job.area) return;
+    const w = z.win, near = !!(w && w.area === state.job.area && Math.hypot(z.pos.x - w.c.x, z.pos.z - w.c.z) < 12);
+    if (areaOf(z.pos.x, z.pos.z, world.mapId) !== state.job.area && !near) return; // zombies at a lot's windows stand outside its fence
     state.job.have++; if (state.job.have >= state.job.need) finish();
   }
   function drop() {

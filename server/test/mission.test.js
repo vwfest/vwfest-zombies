@@ -98,3 +98,29 @@ test('new-lot spawners stay off until that lot is unlocked', () => {
   r.openGate('AC'); const areas = new Set(r.activeWins().map((w) => w.area));
   assert.ok(areas.has('A') && areas.has('C') && !areas.has('E'));
 });
+
+test('a carrier who leaves does not soft-lock a carry job', () => {
+  const r = new Room('M'); const a = r.addPlayer('a'), b = r.addPlayer('b'); r.phase = 'round'; r.missions.onWave(1); r.step(0.05);
+  const it = r.missions.job.items[2]; at(b, it.x, it.z); r.missions.step(0.05); assert.equal(r.missions.job.carry.b, it.id);
+  r.removePlayer('b'); r.missions.step(0.05);
+  assert.equal(r.missions.job.carry.b, undefined);
+  assert.ok(r.missions.items().some((row) => row[0] === it.id));
+  at(a, it.x, it.z); r.missions.step(0.05); assert.equal(r.missions.job.carry.a, it.id);
+});
+
+test('a disconnected carrier drops the item where they stood', () => {
+  const r = new Room('M'); r.addPlayer('a'); const b = r.addPlayer('b'); r.phase = 'round'; r.missions.onWave(1); r.step(0.05);
+  const it = r.missions.job.items[0]; at(b, it.x, it.z); r.missions.step(0.05); at(b, 10, 10); b.connected = false; r.missions.step(0.05);
+  const row = r.missions.items().find((q) => q[0] === it.id); assert.deepEqual([row[1], row[2]], [10, 10]);
+});
+
+test('clear lot D credits kills at its own windows outside the fence', () => {
+  const r = new Room('M'); r.addPlayer('a');
+  for (const id of ['fuel', 'carb', 'bus', 'parts', 'radio']) r.missions.done.add(id);
+  for (let w = 1; w <= 5; w++) r.missions.onWave(w); r.missions.gap = false; r.missions.tryStart();
+  assert.equal(r.missions.job.id, 'clear');
+  for (const w of r.wins.filter((q) => q.area === 'D')) r.missions.onKill({ x: w.out.x, z: w.out.z, win: w });
+  assert.equal(r.missions.job.have, 3);
+  const a = r.wins.find((q) => q.area === 'A'); r.missions.onKill({ x: a.out.x, z: a.out.z, win: a });
+  assert.equal(r.missions.job.have, 3);
+});

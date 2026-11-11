@@ -29,7 +29,7 @@ class Room {
     const p = { id, name: String(name || 'Survivor').replace(/[^A-Za-z0-9_\- .]/g, '').slice(0, 16) || 'Survivor', x: s.x + (k - 1.5) * 1.2, z: s.z, yaw: 0, pitch: 0, hp: PLAYER_HP, pts: START_PTS, kills: 0, heads: 0, dead: false, lastShot: {}, lastIn: 0, lastHit: -99, lastRepair: 0, lastMed: -99, connected: true, ready: false, owned: new Set(['pistol']), ammo: { pistol: packAmmo('pistol') }, reloading: null, held: 'pistol', nades: 1 };
     this.world.resolve(p, PR); this.players.set(id, p); return p;
   }
-  removePlayer(id) { this.players.delete(id); }
+  removePlayer(id) { this.players.delete(id); if (this.missions) this.missions.release(id); }
   // Code rooms wait in the lobby. A reconnect there must ready again; an in-progress match does not return to the lobby.
   onReconnect(id) { const p = this.players.get(id); if (!p) return; p.connected = true; if (this.phase === 'lobby') p.ready = false; }
   setReady(id, on) { const p = this.players.get(id); if (!p || this.phase !== 'lobby') return { ok: false, why: 'state' }; p.ready = !!on; return { ok: true, ready: p.ready }; }
