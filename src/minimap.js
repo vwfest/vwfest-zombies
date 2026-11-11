@@ -12,5 +12,6 @@ export function makeMinimap(world, zombies, P) {
     x.clearRect(0, 0, W, W); x.drawImage(bg, 0, 0); x.fillStyle = '#ff3b4e';
     const r = 2.4 * dpr; for (const z of zombies.list) if (z.state !== 'dead' && z.root.visible) { x.beginPath(); x.arc(mx(z.pos.x), mz(z.pos.z), r, 0, 6.283); x.fill(); }
     const px = mx(P.x), pz = mz(P.z), fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw), s = 6 * dpr;
+    if (world.marker) { x.fillStyle = '#ffd36b'; x.fillRect(mx(world.marker.x) - 3 * dpr, mz(world.marker.z) - 3 * dpr, 6 * dpr, 6 * dpr); }
     x.fillStyle = '#3cf0c0'; x.strokeStyle = '#04241c'; x.lineWidth = dpr; x.beginPath(); x.moveTo(px + fx * s, pz + fz * s); x.lineTo(px - fx * s * 0.6 - fz * s * 0.6, pz - fz * s * 0.6 + fx * s * 0.6); x.lineTo(px - fx * s * 0.6 + fz * s * 0.6, pz - fz * s * 0.6 - fx * s * 0.6); x.closePath(); x.fill(); x.stroke(); };
 }

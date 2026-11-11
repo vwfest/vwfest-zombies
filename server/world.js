@@ -1,10 +1,11 @@
 // Server copy of the map collision (AABBs exported from the client World): movement push-out, segment blocking, bullet rays.
 'use strict';
-const DOOR_Z = -24; const areaOf = (z) => (z > DOOR_Z ? 'A' : 'B');
+const { areaOf, DOOR_Z } = require('./nav.js');
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 class World {
-  constructor(def) { this.cols = def.cols.map((c) => ({ ...c })); this.doorCol = this.cols.find((c) => c.door); }
-  setDoorOpen(open) { if (this.doorCol) this.doorCol.off = !!open; }
+  constructor(def) { this.cols = def.cols.map((c) => ({ ...c })); this.doorCol = this.cols.find((c) => c.door && (!c.gate || c.gate === 'AB')) || this.cols.find((c) => c.door); }
+  setGate(id, open) { for (const c of this.cols) if (c.door && (c.gate === id || (!c.gate && id === 'AB'))) c.off = !!open; }
+  setDoorOpen(open) { this.setGate('AB', open); }
   // push a circle (x,z,r) out of every movement collider
   resolve(p, r) { let hit = false;
     for (let pass = 0; pass < 2; pass++) for (const c of this.cols) { if (c.bo || c.off) continue;

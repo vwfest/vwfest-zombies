@@ -1,0 +1,42 @@
+const test = require('node:test'), assert = require('node:assert');
+const WebSocket = require('ws');
+const { createServer } = require('../index.js');
+let S, port;
+test.before(async () => { S = createServer({ origins: ['http://ok.test'] }); port = await S.listen(0); });
+test.after(() => S.close());
+const open = () => new Promise((res, rej) => {
+  const ws = new WebSocket('ws://127.0.0.1:' + port, { origin: 'http://ok.test' }); const q = [];
+  ws.on('message', (d) => q.push(JSON.parse(d.toString())));
+  ws.queue = q;
+  ws.next = (t, ms = 3000) => new Promise((ok, bad) => { const st = Date.now(); const iv = setInterval(() => { const i = q.findIndex((m) => m.t === t); if (i >= 0) { clearInterval(iv); ok(q.splice(i, 1)[0]); } else if (Date.now() - st > ms) { clearInterval(iv); bad(new Error('timeout ' + t + ' saw ' + q.map((m) => m.t).join(','))); } }, 10); });
+  ws.on('open', () => res(ws)); ws.on('error', rej);
+});
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const SDP = 'v=0\r\no=- 1 2 IN IP4 127.0.0.1\r\ns=-\r\n';
+
+test('voice signaling stays inside the room and cannot spoof the sender', async () => {
+  const a = await open(); a.send(JSON.stringify({ t: 'join', create: true, name: 'Ada' })); const ja = await a.next('joined');
+  const b = await open(); b.send(JSON.stringify({ t: 'join', code: ja.room, name: 'Bea' })); const jb = await b.next('joined');
+  const c = await open(); c.send(JSON.stringify({ t: 'join', create: true, name: 'Cy' })); const jc = await c.next('joined');
+  assert.notEqual(ja.room, jc.room);
+  a.send(JSON.stringify({ t: 'sig', to: jc.id, k: 'offer', s: SDP, from: 'hacker' }));
+  a.send(JSON.stringify({ t: 'sig', to: ja.id, k: 'offer', s: SDP }));
+  a.send(JSON.stringify({ t: 'sig', to: jb.id, k: 'nope', s: SDP }));
+  a.send(JSON.stringify({ t: 'sig', to: jb.id, k: 'offer', s: 'short', from: 'hacker' }));
+  await wait(250);
+  assert.equal(c.queue.some((m) => m.t === 'sig'), false, 'other room heard an offer');
+  assert.equal(a.queue.some((m) => m.t === 'sig'), false, 'self-addressed offer was relayed');
+  assert.equal(b.queue.some((m) => m.t === 'sig'), false, 'bad kind or short SDP was relayed');
+  a.send(JSON.stringify({ t: 'sig', to: jb.id, k: 'offer', s: SDP, from: 'hacker' }));
+  const offer = await b.next('sig');
+  assert.equal(offer.from, ja.id); assert.equal(offer.k, 'offer'); assert.equal(offer.s, SDP);
+  a.send(JSON.stringify({ t: 'sig', to: jb.id, k: 'ice', s: { c: 'candidate:1 1 udp 2122194687 192.168.0.2 54321 typ host', m: '0', l: 0 } }));
+  const ice = await b.next('sig');
+  assert.equal(ice.k, 'ice'); assert.equal(ice.from, ja.id); assert.match(ice.s.c, /^candidate:/); assert.equal(ice.s.l, 0);
+  b.send(JSON.stringify({ t: 'sig', to: ja.id, k: 'answer', s: SDP }));
+  const answer = await a.next('sig'); assert.equal(answer.k, 'answer'); assert.equal(answer.from, jb.id);
+  a.send(JSON.stringify({ t: 'leave' }));
+  const bye = await b.next('sig'); assert.equal(bye.k, 'bye'); assert.equal(bye.from, ja.id);
+  await wait(100); assert.equal(c.queue.some((m) => m.t === 'sig'), false);
+  b.close(); c.close();
+});

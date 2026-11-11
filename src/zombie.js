@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { rnd, pick, clamp, TAU } from './util.js';
-import { areaOf, DOOR_Z } from './world.js';
+import { areaOf } from './world.js';
+import { activeAreas, route, standOf } from './nav.js';
 import { ZOMBIE_DMG, BRUTE_DMG } from './balance.js';
 
 const G = {
@@ -76,7 +77,7 @@ export class Zombies {
   killAll() { const out = []; for (const z of this.list) if (z.state !== 'dead' && z.state !== 'dying') { z.hp = 0; z.state = 'dying'; z.dieT = 0; z.dieDir = rnd(-0.4, 0.4); this.alive--; out.push(z); } return out; }
   // ---- update ----
   update(dt, time, player, door, cb) {
-    const W = this.world; this.t = time; for (const w of W.windows) if (w.cool > 0) w.cool -= dt; const pArea = areaOf(player.z);
+    const W = this.world; this.t = time; for (const w of W.windows) if (w.cool > 0) w.cool -= dt; const pArea = areaOf(player.x, player.z, W.mapId);
     for (let i = 0; i < this.list.length; i++) {
       const z = this.list[i]; if (z.state === 'dead') continue; const s = z.scale;
       // flash
@@ -98,8 +99,16 @@ export class Zombies {
         z.pos.x = sx + (ex - sx) * k; z.pos.z = sz + (ez - sz) * k; z.climbY = Math.sin(k * Math.PI) * 0.75; z.root.position.y = z.climbY; z.yaw = lerpAng(z.yaw, Math.atan2(-w.n.x, -w.n.z), Math.min(1, dt * 8)); sp = 1.5;
         if (k >= 1) { z.state = 'chase'; z.climbY = 0; z.root.position.y = 0; }
       } else { // chase
-        let tx = px, tz = pz; const zArea = areaOf(z.pos.z);
-        if (zArea !== pArea && door.open) { const nearGate = Math.abs(z.pos.x) < 4 && Math.abs(z.pos.z - DOOR_Z) < 2.5; tx = 0; tz = nearGate ? (pArea === 'A' ? DOOR_Z + 4 : DOOR_Z - 4) : DOOR_Z + (zArea === 'A' ? 1.8 : -1.8); }
+        let tx = px, tz = pz; const zArea = areaOf(z.pos.x, z.pos.z, W.mapId);
+        if (zArea !== pArea) {
+          const doors = W.doors && W.doors.length ? W.doors : (door ? [door] : []);
+          const path = route(zArea, pArea, doors);
+          if (path && path.length) {
+            const g = path[0], next = g.areas[0] === zArea ? g.areas[1] : g.areas[0];
+            const through = Math.hypot(z.pos.x - g.x, z.pos.z - g.z) < 1.65;
+            const dest = standOf(g, through ? next : zArea); tx = dest.x; tz = dest.z;
+          }
+        }
         let dx = tx - z.pos.x, dz = tz - z.pos.z; const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
         const pd = Math.hypot(px - z.pos.x, pz - z.pos.z);
         // stuck sidestep
@@ -141,7 +150,7 @@ export class Zombies {
       z.pelvis.position.y = 0.95 + Math.abs(sw) * (ws > 0.2 ? 0.05 : 0.02);
     }
   }
-  reroute(z) { const act = this.world.windows.filter((w) => w.area === 'A' || this.world.door.open); const w = pick(act); z.win = w; z.state = 'approach'; z.stuckTot = 0; z.stuck = 0; z.pos.set(w.out.x + w.n.x * 3, 0, w.out.z + w.n.z * 3); }
+  reroute(z) { const areas = activeAreas(this.world.doors && this.world.doors.length ? this.world.doors : [this.world.door]); const act = this.world.windows.filter((w) => areas.has(w.area)); const w = pick(act.length ? act : this.world.windows); z.win = w; z.state = 'approach'; z.stuckTot = 0; z.stuck = 0; z.pos.set(w.out.x + w.n.x * 3, 0, w.out.z + w.n.z * 3); }
 }
 
 function raySphere(o, d, c, r) { const ox = o.x - c.x, oy = o.y - c.y, oz = o.z - c.z; const b = ox * d.x + oy * d.y + oz * d.z, cc = ox * ox + oy * oy + oz * oz - r * r, disc = b * b - cc; if (disc < 0) return null; const t = -b - Math.sqrt(disc); return t > 0 ? t : null; }

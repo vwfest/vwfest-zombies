@@ -182,5 +182,20 @@ body.nofs .fsbtn{display:none!important}
 #lobby{z-index:24}#lobby h2{letter-spacing:.28em;margin:6px 0}#lobbyRoster{list-style:none;margin:8px auto;padding:0;max-width:320px;text-align:left}#lobbyRoster li{padding:4px 0;font-weight:700}#lobbyRoster .ok{color:var(--acc)}#lobbyRoster .wait{color:#9fb0ba}#lobby .primary{padding:12px 28px;letter-spacing:.18em}
 @media (max-height:520px){#lobby .panel{padding:10px 14px}#lobby .tag{font-size:12px;margin:4px auto}#lobby h2{font-size:28px}}
 #mpTag{left:50%;top:10px;transform:translateX(-50%);padding:4px 12px;font-size:11px;letter-spacing:.2em;font-weight:800;color:var(--acc)}
+#mission{left:50%;top:42px;transform:translateX(-50%);min-width:210px;max-width:72vw;padding:7px 12px 8px;text-align:left;pointer-events:none;z-index:5}
+#mission .msTop{display:flex;justify-content:space-between;gap:14px;align-items:baseline}
+#mission b{font-size:13px;letter-spacing:.08em;text-transform:uppercase}
+#mission #msCount{color:var(--amb);font-weight:800;font-variant-numeric:tabular-nums;font-size:12px}
+#mission #msDetail{display:block;margin-top:2px;color:#d5e2ea;font-size:12px;font-weight:650}
+#mission .prog{height:4px;margin-top:6px;background:rgba(255,255,255,.16);border-radius:4px;overflow:hidden}
+#mission .prog i{display:block;height:100%;width:0;background:var(--acc)}
+#objArrow{width:16px;height:16px;margin:0;border-right:3px solid var(--amb);border-top:3px solid var(--amb);z-index:7;filter:drop-shadow(0 0 6px rgba(0,0,0,.85));pointer-events:none}
+#voiceList{right:16px;top:68px;display:flex;flex-direction:column;align-items:flex-end;gap:4px;pointer-events:none;z-index:6}
+#voiceList span{display:flex;align-items:center;gap:6px;padding:3px 8px;border-radius:999px;background:rgba(0,0,0,.5);border:1px solid var(--bd);font-size:11px;font-weight:800}
+#voiceList i{width:8px;height:8px;border-radius:50%;background:#4c5963;display:block}
+#voiceList span.on i{background:var(--acc);box-shadow:0 0 8px var(--acc)}
+#btnVoice.on{border-color:var(--acc);color:var(--acc)}
+#btnVoice.muted{color:#ff5a6e;border-color:#ff5a6e}
+@media (max-height:500px){body.touch #mission{top:auto;bottom:10px;transform:translateX(-50%) scale(.84);transform-origin:bottom center}body.touch #voiceList{top:46px;right:64px}}
 @media (max-height:500px){.coop{margin-top:6px;gap:6px}.coop input{padding:6px 8px;width:100px}.coop button{padding:6px 10px}}
 #specTag{left:50%;bottom:22%;transform:translateX(-50%);padding:8px 16px;font-size:13px;letter-spacing:.22em;font-weight:800;color:var(--red)}

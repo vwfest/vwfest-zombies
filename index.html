@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <script src="framebuster.js"></script>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://race.vwfestmemecoin.com https://vwfest-zombies-coop.onrender.com wss://vwfest-zombies-coop.onrender.com; font-src 'self' data:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://race.vwfestmemecoin.com https://vwfest-zombies-coop.onrender.com wss://vwfest-zombies-coop.onrender.com stun://stun.l.google.com:19302; font-src 'self' data:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="Permissions-Policy" content="microphone=(self)">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="theme-color" content="#05080c">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -24,12 +25,15 @@
 <div id="hud" class="hidden">
   <div id="roundBox" class="glass"><span class="lbl">ROUND</span><b id="roundNum">1</b></div>
   <div id="powers"></div>
-  <div id="topRight"><button id="btnMute" class="icon" aria-label="Mute">🔊</button><button id="btnFull" class="icon fsbtn" aria-label="Fullscreen landscape">⛶</button><button id="btnPause" class="icon" aria-label="Pause">❚❚</button></div>
+  <div id="topRight"><button id="btnVoice" class="icon hidden" aria-label="Join voice">🎤</button><button id="btnMute" class="icon" aria-label="Mute">🔊</button><button id="btnFull" class="icon fsbtn" aria-label="Fullscreen landscape">⛶</button><button id="btnPause" class="icon" aria-label="Pause">❚❚</button></div>
   <div id="cross"><i class="l"></i><i class="r"></i><i class="u"></i><i class="d"></i><i class="dot"></i><div id="hitm"><i></i><i></i><i></i><i></i></div></div>
   <div id="prompt" class="glass"></div>
   <div id="banner"></div>
   <div id="toast"></div>
   <div id="mpTag" class="glass hidden"></div>
+  <div id="mission" class="glass hidden"><div class="msTop"><b id="msTitle"></b><span id="msCount"></span></div><span id="msDetail"></span><div class="prog"><i id="msBar"></i></div></div>
+  <div id="objArrow" class="hidden"></div>
+  <div id="voiceList" class="hidden"></div>
   <div id="specTag" class="glass hidden"></div>
   <div id="pop"></div>
   <div id="statL" class="glass"><div class="hp"><span class="hpl"><span>HEALTH</span><b id="hpNum">200</b></span><div class="bar"><i id="hpFill"></i></div><div id="medCue">✚ Med kit drops on your next kill</div></div><div class="pts"><span>POINTS</span><b id="pts">500</b></div></div>
@@ -61,9 +65,9 @@
     <div class="row coop" id="coop"><span class="k">CO-OP <em>beta</em></span><input id="coName" maxlength="16" placeholder="Nickname" autocomplete="off"><button id="coQuick" class="ghost">Quick match</button><button id="coCreate" class="ghost">Create room</button><input id="coCode" maxlength="5" placeholder="CODE" autocomplete="off"><button id="coJoin" class="ghost">Join</button></div>
     <p id="coMsg" class="coMsg"></p>
     <div class="cols">
-      <div class="how" id="howDesk"><h3>CONTROLS</h3><ul><li><kbd>W A S D</kbd> move · <kbd>Shift</kbd> sprint</li><li><kbd>Mouse</kbd> aim · <kbd>Click</kbd> fire</li><li><kbd>R</kbd> reload · <kbd>E</kbd> buy / repair (hold)</li><li><kbd>1</kbd> <kbd>2</kbd> <kbd>Q</kbd> swap · <kbd>F</kbd> flashlight</li><li><kbd>M</kbd> mute · <kbd>Esc</kbd> pause</li></ul></div>
+      <div class="how" id="howDesk"><h3>CONTROLS</h3><ul><li><kbd>W A S D</kbd> move · <kbd>Shift</kbd> sprint</li><li><kbd>Mouse</kbd> aim · <kbd>Click</kbd> fire</li><li><kbd>R</kbd> reload · <kbd>E</kbd> buy / repair (hold)</li><li><kbd>1</kbd> <kbd>2</kbd> <kbd>Q</kbd> swap · <kbd>F</kbd> flashlight</li><li><kbd>V</kbd> co-op voice · <kbd>M</kbd> mute · <kbd>Esc</kbd> pause</li></ul></div>
       <div class="how" id="howTouch"><h3>TOUCH</h3><ul><li>Left thumb: move stick</li><li>Right side: drag to look</li><li>Big button fire · <b>R</b> reload · <b>E</b> use · ⇄ swap · lamp light</li><li>Landscape works best</li></ul></div>
-      <div class="how"><h3>TIPS</h3><ul><li>Hold <b>E</b> at a window to nail planks back</li><li>Headshots pay double</li><li>Open the gate for new guns</li><li>Gather drops: <b>2× Cash</b>, <b>Full Mags</b>, <b>Kaboom</b></li></ul></div>
+      <div class="how"><h3>TIPS</h3><ul><li>Hold <b>E</b> at a window to nail planks back</li><li>Headshots pay double</li><li>Open the gate for new guns. Objectives unlock the side lots</li><li>Gather drops: <b>2× Cash</b>, <b>Full Mags</b>, <b>Kaboom</b></li></ul></div>
       <div class="how scores"><h3>BEST ROUNDS</h3><ol id="scoreList"></ol></div>
       <div class="how scores globalBox"><h3>GLOBAL SURVIVORS</h3><ol id="globalList" class="scoreList"><li class="muted">Loading…</li></ol></div>
     </div>

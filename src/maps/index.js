@@ -1,5 +1,5 @@
-// Map registry. Every map keeps the shared two-area topology (front lot A, gate at x=0 z=-24, back lot B)
-// so zombie pathing / gate logic in zombie.js stays unchanged. Bounds + horde cap scale per map size.
+// Map registry. Motel and Drive-In keep the two-area yard (front lot A, gate at z=-24, back lot B).
+// Junkyard adds lots C, D and E. Bounds + horde cap scale per map size.
 import { World, DOOR_Z } from '../world.js';
 import { makeBeetle, makeBus, makeTireStack, makeDrum, makeCrate, makePole, makeRock } from '../props.js';
 import { rnd } from '../util.js';
@@ -16,6 +16,7 @@ class Variant extends World {
   lamps_(list) { for (const [x, z, t, r] of list) { const p = makePole(this.M, !!t); p.position.set(x, 0, z); p.rotation.y = r; p.traverse((m) => { if (m.isMesh) m.castShadow = !m.userData.bulb; }); p.updateMatrixWorld(true); this.addCol(x - 0.2, x + 0.2, z - 0.2, z + 0.2, 5); const bp = p.userData.bulbPos.clone().applyMatrix4(p.matrixWorld); this.lamps.push({ pos: bp, teal: !!t, ph: rnd(100) }); this.staticGroup.add(p); } }
   floor(w, d, x, z) { this.box(w, 0.03, d, x, 0.0, z, this.M.concrete, { cast: false }); }
   build() {
+    this.mapId = this._def.id || 'motel';
     const L = this._def.L, M = this.M, H = 3.2, th = 0.4;
     this.buildSky(); this.buildGround();
     const X = (z, a, b, o = [], m = M.fence) => this.wall('x', z, a, b, o, H, th, m), Z = (x, a, b, o = [], m = M.fence) => this.wall('z', x, a, b, o, H, th, m);
@@ -60,5 +61,5 @@ const LAYOUTS = {
 
 export function buildWorld(scene, T, tier, id) {
   const m = getMap(id); if (m.id === 'junkyard') return new World(scene, T, tier);
-  return new Variant(scene, T, tier, { L: LAYOUTS[m.id] });
+  return new Variant(scene, T, tier, { L: LAYOUTS[m.id], id: m.id });
 }

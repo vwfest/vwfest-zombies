@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { lb } from './lb.js';
 import { makeTextures, rnd, pick, clamp, lerp, TAU } from './util.js';
-import { World, areaOf, DOOR_Z } from './world.js';
+import { World } from './world.js';
+import { activeAreas } from './nav.js';
+import { createMissions } from './missions.js';
 import { buildWorld, getMap, MAPS } from './maps/index.js';
 import { getMode, scaled } from './modes.js';
 import { Zombies } from './zombie.js';
@@ -10,6 +12,8 @@ import { loadPacks } from './hd/pack.js';
 import { addGore } from './hd/gore.js';
 import { createMP } from './mp.js';
 let MP = null; // co-op client, created after the scene is ready
+let missions = null;
+let voice = null;
 import { makeMinimap } from './minimap.js';
 await loadPacks(); // pre-baked models, fetched separately (assets/*.bin)
 import { FX, Motes, Post } from './fx.js';
@@ -177,7 +181,7 @@ function shoot() {
     const r = zombies.damage(z, e.dmg, e.head, e.p, e.n); if (!r) continue; const dbl = G.double > 0 ? 2 : 1;
     sfx.zhit(pan(z.pos), e.head); fx.blood(e.p, e.n, e.head ? 14 : 8); fx.sparks(e.p, e.n, 2);
     let gain = 10 * dbl; const hm = $('hitm'); hm.classList.remove('on', 'kill'); void hm.offsetWidth; hm.classList.add('on'); sfx.tick(false);
-    if (r.killed) { gain = (e.head ? 100 : z.value) * dbl; P.kills++; G.kills++; if (e.head) P.heads++; hm.classList.add('kill'); sfx.tick(true); sfx.zdie(pan(z.pos), 0.5); fx.blood(e.p, e.n, 26, 1.4); fx.dust(new THREE.Vector3(z.pos.x, 0.3, z.pos.z), { x: 0, y: 1, z: 0 }, 5); P.shake = Math.min(1, P.shake + 0.1); maybeDrop(z); medKitOnKill(z); }
+    if (r.killed) { gain = (e.head ? 100 : z.value) * dbl; P.kills++; G.kills++; if (e.head) P.heads++; hm.classList.add('kill'); sfx.tick(true); sfx.zdie(pan(z.pos), 0.5); fx.blood(e.p, e.n, 26, 1.4); fx.dust(new THREE.Vector3(z.pos.x, 0.3, z.pos.z), { x: 0, y: 1, z: 0 }, 5); P.shake = Math.min(1, P.shake + 0.1); maybeDrop(z); medKitOnKill(z); missions.onKill(z); }
     setTimeout(() => hm.classList.remove('on'), r.killed ? 280 : 190);
     P.pts += gain; popText('+' + gain, e.head && r.killed);
   }
@@ -206,9 +210,11 @@ function pickPower(u) {
   sfx.power(u.type); const dbl = 0; banner(PW[u.type].name, PW[u.type].sub);
   if (u.type === 'ammo') { for (const s of P.slots) if (s) { s.mag = WEAPONS[s.id].mag; s.reserve = WEAPONS[s.id].reserve; } }
   else if (u.type === 'double') G.double = 30;
-  else if (u.type === 'nuke') { const ks = zombies.killAll(); for (const z of ks) { fx.blood(new THREE.Vector3(z.pos.x, 1.2, z.pos.z), { x: 0, y: 1, z: 0 }, 22, 1.4); fx.glowBurst(new THREE.Vector3(z.pos.x, 1.2, z.pos.z), 3, 1.5, 0.4, 10, 5); } P.pts += 400 * (G.double > 0 ? 2 : 1); sfx.boom(); P.shake = 1; $('fx-flash').style.transition = 'none'; $('fx-flash').style.opacity = 0.85; requestAnimationFrame(() => { $('fx-flash').style.transition = 'opacity 1.2s'; $('fx-flash').style.opacity = 0; }); G.kills += ks.length; P.kills += ks.length; }
+  else if (u.type === 'nuke') { const ks = zombies.killAll(); for (const z of ks) { if (!MP?.on) missions.onKill(z); fx.blood(new THREE.Vector3(z.pos.x, 1.2, z.pos.z), { x: 0, y: 1, z: 0 }, 22, 1.4); fx.glowBurst(new THREE.Vector3(z.pos.x, 1.2, z.pos.z), 3, 1.5, 0.4, 10, 5); } P.pts += 400 * (G.double > 0 ? 2 : 1); sfx.boom(); P.shake = 1; $('fx-flash').style.transition = 'none'; $('fx-flash').style.opacity = 0.85; requestAnimationFrame(() => { $('fx-flash').style.transition = 'opacity 1.2s'; $('fx-flash').style.opacity = 0; }); G.kills += ks.length; P.kills += ks.length; }
   scene.remove(u.g); fx.glowBurst(new THREE.Vector3(u.x, 1, u.z), ...PW[u.type].col.map((v) => v * 0.7), 24, 4);
 }
+
+missions = createMissions({ world, P, G, sfx, banner, toast, popText, spawnPower, weapons: WEAPONS });
 
 /* ---------------- crate ---------------- */
 const previews = {}; function preview(id) { if (!previews[id]) { const g = buildViewmodel(id, false); g.scale.setScalar(1.6); g.rotation.y = 0; g.visible = false; world.crate.hold.add(g); previews[id] = g; } return previews[id]; }
@@ -232,7 +238,7 @@ function startRound(n) {
   G.round = n; G.toSpawn = roundCount(n); G.brutes = n >= 5 ? (n % 5 === 0 ? Math.min(4, 1 + ((n / 5) | 0)) : n >= 7 ? 1 : 0) : 0; G.brutes = Math.round(G.brutes * MODE.brute); G.phase = 'round'; G.spawnT = 1.5; G.drops = 0;
   sfx.round(n); banner('ROUND ' + n, n === 1 ? 'Board up. Hold the yard.' : 'They are faster this time'); const e = $('roundNum'); e.classList.remove('pulse'); void e.offsetWidth; e.classList.add('pulse');
 }
-function activeWindows() { return world.windows.filter((w) => w.area === 'A' || world.door.open); }
+function activeWindows() { const areas = activeAreas(world.doors); return world.windows.filter((w) => areas.has(w.area)); }
 function trySpawn(dt) {
   if (G.phase !== 'round' || G.toSpawn <= 0) return; G.spawnT -= dt; if (G.spawnT > 0) return;
   if (zombies.alive >= zombies.max) { G.spawnT = 0.3; return; }
@@ -245,16 +251,19 @@ function findFocus() {
   let best = null; const test = (o, d, lim) => { if (d < lim && (!best || d < best.d)) best = { ...o, d }; };
   for (const w of world.windows) { if (w.count < 6) test({ type: 'win', w }, Math.hypot(P.x - w.in.x, P.z - w.in.z), 2.1); }
   for (const b of world.buys) test({ type: 'buy', b }, Math.hypot(P.x - b.pos.x, P.z - b.pos.z), 1.9);
-  if (!world.door.open) test({ type: 'door' }, Math.hypot(P.x - world.door.pos.x, P.z - (DOOR_Z + 1)), 3.4);
+  for (const d of world.doors) if (!d.open) { const spots = d.stand ? Object.values(d.stand) : [d.pos]; for (const s of spots) test({ type: 'door', door: d }, Math.hypot(P.x - s.x, P.z - s.z), 2.4); }
+  const job = missions && missions.focus(P.x, P.z); if (job) test(job, job.d, job.d + 0.01);
   const c = world.crate; if (c.state === 'idle' || c.state === 'ready') test({ type: 'crate' }, Math.hypot(P.x - c.x, P.z - c.z), 2.2);
   return best;
 }
 function interact(f, held, dt) {
   if (MP?.on) return mpInteract(f, held, dt);
   if (f.type === 'win') { if (held) { G.repairT += dt; if (G.repairT > 0.5) { G.repairT = 0; if (world.addPlank(f.w)) { sfx.repair(); P.pts += 10 * (G.double > 0 ? 2 : 1); popText('+10'); } } } return; }
+  if (f.type === 'job' && f.hold) { if (held) { G.repairT += dt; if (G.repairT > 0.5) { G.repairT = 0; missions.use(); } } return; }
   if (!input.interactEdge) return;
   if (f.type === 'buy') { const owned = P.slots.find((s) => s && s.id === f.b.id); const price = owned ? Math.floor(f.b.price / 2) : f.b.price; if (owned && owned.mag === WEAPONS[owned.id].mag && owned.reserve === WEAPONS[owned.id].reserve) { toast('Ammo already full'); return; } if (P.pts < price) { sfx.deny(); toast('Not enough points'); return; } P.pts -= price; sfx.cash(); giveWeapon(f.b.id); }
-  else if (f.type === 'door') { if (P.pts < world.door.price) { sfx.deny(); toast('Not enough points'); return; } P.pts -= world.door.price; sfx.cash(); sfx.door(); world.door.open = true; banner('GATE OPEN', 'The back lot awaits'); }
+  else if (f.type === 'door') { const d = f.door, price = missions.price(d); if (P.pts < price) { sfx.deny(); toast('Not enough points'); return; } P.pts -= price; sfx.cash(); sfx.door(); d.open = true; banner(d.id === 'AB' ? 'GATE OPEN' : d.name.toUpperCase(), d.blurb); }
+  else if (f.type === 'job') missions.use();
   else if (f.type === 'crate') crateUse();
 }
 function updatePrompt(f) {
@@ -262,7 +271,8 @@ function updatePrompt(f) {
   const key = isTouch ? '<kbd>E</kbd>' : '<kbd>E</kbd>'; const cost = (n) => `<span class="cost${P.pts < n ? ' poor' : ''}">${n}</span>`;
   if (f.type === 'win') setPrompt(`${key}${isTouch ? 'Hold' : 'Hold'} to repair barricade<span class="prog"><i data-w="${Math.round((f.w.count / 6) * 100)}"></i></span>`);
   else if (f.type === 'buy') { const owned = P.slots.find((s) => s && s.id === f.b.id); setPrompt(owned ? `${key}Refill ${f.b.name}${cost(Math.floor(f.b.price / 2))}` : `${key}Buy ${f.b.name}${cost(f.b.price)}`); }
-  else if (f.type === 'door') setPrompt(`${key}Open the gate${cost(world.door.price)}`);
+  else if (f.type === 'door') { const price = missions.price(f.door); setPrompt(`${key}${f.door.id === 'AB' ? 'Open the gate' : 'Open ' + f.door.name}${cost(price)}`); }
+  else if (f.type === 'job') setPrompt(`${key}${f.hold ? 'Hold to board the window' : f.name}`);
   else if (f.type === 'crate') setPrompt(world.crate.state === 'ready' ? `${key}Take ${WEAPONS[world.crate.weapon].name}` : `${key}Lucky Toolbox${cost(world.crate.price)}`);
 }
 
@@ -313,7 +323,7 @@ function hitPlayer(z) {
   const dx = z.pos.x - P.x, dz = z.pos.z - P.z; const ang = Math.atan2(dx, -dz) - (-P.yaw); const e = $('fx-dir'); e.style.display = 'block'; e.firstElementChild.style.transform = `rotate(${(ang * 180) / Math.PI}deg)`; e.style.opacity = 1; setTimeout(() => (e.style.opacity = 0), 500); setTimeout(() => (e.style.display = 'none'), 900);
   if (P.hp <= 0) die();
 }
-function die() { P.hp = 0; P.dead = true; P.deadT = 0; sfx.over(); input.fire = false; $('hud').classList.add('hud-dead'); setPrompt(''); if (document.pointerLockElement) document.exitPointerLock?.(); }
+function die() { P.hp = 0; P.dead = true; P.deadT = 0; if (!MP?.on && missions) missions.drop(); sfx.over(); input.fire = false; $('hud').classList.add('hud-dead'); setPrompt(''); if (document.pointerLockElement) document.exitPointerLock?.(); }
 
 /* ---------------- scores ---------------- */
 function loadScores() { try { return JSON.parse(localStorage.getItem('vwz_scores') || '[]'); } catch (e) { return []; } }
@@ -340,7 +350,7 @@ function newGame() {
   zombies.reset(); fx.reset(); for (const u of G.ups) scene.remove(u.g); G.ups = []; closeCrate(); world.crate.lid.rotation.x = 0;
   for (const w of world.windows) while (w.count < 6) world.addPlank(w);
   hud.hp = hud.pts = hud.mag = hud.res = -1; hud.name = hud.alt = ''; hud.round = -1; $('hud').classList.remove('hud-dead');
-  if (world.door.open) { world.door.open = false; world.door.t = 0; world.door.mesh.position.y = 0; world.door.col.off = false; }
+  world.resetDoors(); if (missions) missions.reset();
   showGun();
 }
 function startGame() {
@@ -351,7 +361,7 @@ function startGame() {
 }
 function pause() { if (G.state !== 'playing' || P.dead) return; G.state = 'paused'; $('pause').classList.remove('hidden'); input.fire = false; input.f = input.s = 0; if (document.pointerLockElement) document.exitPointerLock?.(); setPrompt(''); }
 function resume() { if (G.state !== 'paused') return; G.state = 'playing'; $('pause').classList.add('hidden'); sfx.init(); if (!isTouch && !qs.has('test')) { try { canvas.requestPointerLock?.()?.catch?.(() => {}); } catch (e) {} } }
-function toMenu() { if (MP?.on) { MP.stop(); $('mpTag').classList.add('hidden'); } G.mpPhase = ''; G.state = 'menu'; ['pause', 'over', 'lobby'].forEach((i) => $(i).classList.add('hidden')); $('menu').classList.remove('hidden'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); renderScores($('scoreList'), loadScores()); refreshGlobal(); zombies.reset(); if (P.gun) P.gun.visible = false; setPrompt(''); P.dead = false; flashSprite.visible = false; }
+function toMenu() { if (voice) voice.leave(); $('btnVoice').classList.add('hidden'); $('voiceList').classList.add('hidden'); if (MP?.on) { MP.stop(); $('mpTag').classList.add('hidden'); } G.mpPhase = ''; G.state = 'menu'; ['pause', 'over', 'lobby'].forEach((i) => $(i).classList.add('hidden')); $('menu').classList.remove('hidden'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); renderScores($('scoreList'), loadScores()); refreshGlobal(); zombies.reset(); if (P.gun) P.gun.visible = false; setPrompt(''); P.dead = false; flashSprite.visible = false; }
 function gameOver() {
   G.state = 'over'; const list = saveScore({ round: Math.max(1, G.round), kills: P.kills, pts: P.pts, t: Date.now() });
   $('oRound').textContent = Math.max(1, G.round); $('oKills').textContent = P.kills; $('oHeads').textContent = P.heads; $('oPts').textContent = P.pts.toLocaleString(); const s = Math.floor(G.runTime); $('oTime').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
@@ -368,7 +378,7 @@ function tick(dt) {
   if (G.state === 'menu') {
     G.orbit += dt * 0.12; const a = G.orbit, R = 9.5; cam.position.set(Math.sin(a) * R, 2.6 + Math.sin(a * 0.7) * 0.4, 6 + Math.cos(a) * R * 0.8); cam.lookAt(0, 1.8, 3); cam.rotation.z = 0;
     G.menuSpawn -= dt; if (G.menuSpawn <= 0 && zombies.alive < 5) { G.menuSpawn = 2.2; const z = zombies.spawn(pick(world.windows.filter((w) => w.area === 'A')), 2); if (z) { z.state = 'chase'; z.pos.set(rnd(-14, 14), 0, rnd(-18, -4)); z.speed = rnd(0.9, 1.5); z.dmg = 0; } }
-    menuPlayer.x = 0; menuPlayer.z = 6; zombies.update(dt, t, menuPlayer, world.door, cbsMenu); world.update(dt, t, { x: cam.position.x, z: cam.position.z }); fx.update(dt); motes.center = { x: 0, z: 6 }; mist.center = motes.center; motes.ps.update(dt); mist.ps.update(dt); gunRoot.visible = false; beam.visible = false; return;
+    menuPlayer.x = 0; menuPlayer.z = 6; zombies.update(dt, t, menuPlayer, world.door, cbsMenu); world.update(dt, t, { x: cam.position.x, z: cam.position.z }); fx.update(dt); if (missions) missions.frame(cam); motes.center = { x: 0, z: 6 }; mist.center = motes.center; motes.ps.update(dt); mist.ps.update(dt); gunRoot.visible = false; beam.visible = false; return;
   }
   gunRoot.visible = true; beam.visible = tier > 0 && P.flashlight && !P.dead;
   if (G.state === 'paused') return;
@@ -386,7 +396,8 @@ function tick(dt) {
   else if (G.phase === 'wait') { G.interT -= dt; if (G.interT <= 0) startRound(1); }
   else if (G.phase === 'round') { trySpawn(dt); if (G.toSpawn <= 0 && zombies.alive <= 0) { G.phase = 'inter'; G.interT = MODE.inter; } }
   else if (G.phase === 'inter') { G.interT -= dt; if (G.interT <= 0) startRound(G.round + 1); }
-  if (!MP?.on) zombies.update(dt, t, P, world.door, cbs); world.update(dt, t, P); minimap(dt);
+  if (!MP?.on) { zombies.update(dt, t, P, world.door, cbs); missions.update(dt); }
+  world.update(dt, t, P); minimap(dt); if (missions) missions.frame(cam); if (voice && voice.joined) voice.tick();
   motes.center = { x: P.x, z: P.z }; mist.center = motes.center; motes.ps.update(dt); mist.ps.update(dt); fx.update(dt); updateCrate(dt);
   // power-ups
   if (G.double > 0) G.double -= dt;
@@ -411,7 +422,7 @@ function updateAxes() { input.f = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.Ke
 addEventListener('keydown', (e) => { if (e.target && e.target.tagName === 'INPUT') return;
   if (e.repeat) return; keys[e.code] = true; if (G.state === 'playing' && !P.dead) {
     if (G.mpPhase === 'lobby') { /* code rooms stay in the lobby until the server starts the match */ }
-    else { if (e.code === 'KeyR') input.reload = true; if (e.code === 'KeyE') { input.interact = true; input.interactEdge = true; } if (e.code === 'Digit1') switchTo(0); if (e.code === 'Digit2') switchTo(1); if (e.code === 'KeyQ') switchTo(1 - P.cur); if (e.code === 'KeyF') setFlash(!P.flashlight); if (e.code === 'KeyP') pause(); }
+    else { if (e.code === 'KeyR') input.reload = true; if (e.code === 'KeyE') { input.interact = true; input.interactEdge = true; } if (e.code === 'Digit1') switchTo(0); if (e.code === 'Digit2') switchTo(1); if (e.code === 'KeyQ') switchTo(1 - P.cur); if (e.code === 'KeyF') setFlash(!P.flashlight); if (e.code === 'KeyP') pause(); if (e.code === 'KeyV' && MP?.on && voice) voice.toggle(); }
   } else if (G.state === 'paused' && e.code === 'KeyP') resume();
   if (e.code === 'KeyM') toggleMute(); if (e.code === 'Enter' && (G.state === 'menu' || G.state === 'over')) startGame(); updateAxes();
 });
@@ -469,15 +480,16 @@ requestAnimationFrame(frame);
 if ('serviceWorker' in navigator && location.protocol !== 'file:' && !qs.has('nosw')) navigator.serviceWorker.register('sw.js').catch(() => {});
 function mpInteract(f, held, dt) { // co-op: ask the server; it checks distance + points and replies with 'act' / snapshot changes
   if (f.type === 'win') { if (held) { G.repairT += dt; if (G.repairT > 0.5) { G.repairT = 0; MP.send({ t: 'repair', w: f.w.id }); } } return; }
+  if (f.type === 'job' && f.hold) { if (held) { G.repairT += dt; if (G.repairT > 0.5) { G.repairT = 0; MP.send({ t: 'obj' }); } } return; }
   if (!input.interactEdge) return;
-  if (f.type === 'buy') MP.send({ t: 'buy', w: f.b.id }); else if (f.type === 'door') MP.send({ t: 'door' }); else if (f.type === 'crate') MP.send({ t: 'crate' });
+  if (f.type === 'buy') MP.send({ t: 'buy', w: f.b.id }); else if (f.type === 'door') MP.send({ t: 'door', id: f.door.id }); else if (f.type === 'job') MP.send({ t: 'obj' }); else if (f.type === 'crate') MP.send({ t: 'crate' });
 }
-/* ---------------- co-op (beta, local server only for now) ---------------- */
+/* ---------------- co-op ---------------- */
 const MP_URL = qs.get('server') || 'wss://vwfest-zombies-coop.onrender.com';
 MP = createMP({ scene, zombies, P, G, cam, world,
-  onJoined: (m) => { G.mpPhase = m.phase || ''; startGame(); G.round = 0; $('mpTag').textContent = 'CO-OP · ROOM ' + m.room; $('mpTag').classList.remove('hidden'); if (m.phase === 'lobby') { $('lobbyCode').textContent = m.room; $('lobby').classList.remove('hidden'); $('toast').classList.remove('on'); clearTimeout(toastT); } else toast('Co-op room ' + m.room + ' · share the code with friends'); },
+  onJoined: (m) => { G.mpPhase = m.phase || ''; startGame(); G.round = 0; $('mpTag').textContent = 'CO-OP · ROOM ' + m.room; $('mpTag').classList.remove('hidden'); bootVoice(); if (m.phase === 'lobby') { $('lobbyCode').textContent = m.room; $('lobby').classList.remove('hidden'); $('toast').classList.remove('on'); clearTimeout(toastT); } else toast('Co-op room ' + m.room + ' · share the code with friends'); },
   onLobby: (snap) => { const was = G.mpPhase; G.mpPhase = snap.phase; const waiting = snap.phase === 'lobby'; $('lobby').classList.toggle('hidden', !waiting); if (was === 'lobby' && !waiting && !isTouch && !qs.has('test')) { try { canvas.requestPointerLock?.()?.catch?.(() => {}); } catch (e) {} } if (!waiting) return; $('lobbyCode').textContent = snap.room || MP.S.room || '-----'; const me = snap.p.find((p) => p[0] === MP.S.id); $('lobbyReady').textContent = me && me[13] ? 'UNREADY' : 'READY'; $('lobbyRoster').innerHTML = snap.p.map((p) => { const st = !p[10] ? 'disconnected' : p[13] ? 'ready' : 'waiting'; const nm = String(p[1]).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); return `<li class="${p[13] ? 'ok' : 'wait'}">${nm}${p[0] === MP.S.id ? ' (you)' : ''} · ${st}</li>`; }).join(''); },
-  onStatus: (s) => { toast(String(s)); const e = $('coMsg'); if (e) e.textContent = String(s); },
+  onStatus: (s) => { toast(String(s)); const e = $('coMsg'); if (e) e.textContent = String(s); if (s === 'Reconnected' && voice) voice.rebuild(); },
   onRound: (n) => { G.round = n; G.phase = 'round'; sfx.round(n); banner('ROUND ' + n, 'Co-op · hold the yard together'); },
   onHurt: (d) => { P.lastHit = G.time; P.dmg = Math.max(P.dmg, 0.65 + 0.35 * (1 - Math.max(0, P.hp) / P.maxHp)); P.shake = 1; sfx.hurt(); },
   onDown: () => { die(); toast('You are down. Teammates revive you if they clear the round'); },
@@ -489,16 +501,31 @@ MP = createMP({ scene, zombies, P, G, cam, world,
       if (e.type === 'ammo' && e.p === MP.S.id) for (const s of P.slots) if (s) { s.mag = WEAPONS[s.id].mag; s.reserve = WEAPONS[s.id].reserve; }
       if (e.type === 'nuke') { sfx.boom(); P.shake = 1; $('fx-flash').style.transition = 'none'; $('fx-flash').style.opacity = 0.85; requestAnimationFrame(() => { $('fx-flash').style.transition = 'opacity 1.2s'; $('fx-flash').style.opacity = 0; }); } }
     else if (e.e === 'plank' && e.by === MP.S.id) { G.mpRepairs = (G.mpRepairs || 0) + 1; sfx.repair(); popText('+10'); }
+    else if (e.e === 'mission') missions.onNetEvent(e);
     else if (e.e === 'crate' && e.s === 'shut') toast('The toolbox slammed shut'); },
   onAct: (m) => { if (!m.ok) { if (m.why === 'pts') { sfx.deny(); toast('Not enough points'); } else if (m.why === 'not-yours') toast('That weapon belongs to a teammate'); return; }
     if (m.a === 'buy') { sfx.cash(); giveWeapon(m.w); } else if (m.a === 'door') sfx.cash(); else if (m.a === 'crate') { sfx.cash(); if (m.s === 'roll') { sfx.open(); sfx.jingle(4); } else if (m.s === 'take') { giveWeapon(m.w); banner(WEAPONS[m.w].name.toUpperCase()); } } },
   onPlank: (w, off) => { if (off) cbs.plank(w, true); },
-  onDoor: () => { sfx.door(); banner('GATE OPEN', 'The back lot awaits'); },
+  onDoor: (d) => { sfx.door(); banner(!d || d.id === 'AB' ? 'GATE OPEN' : d.name.toUpperCase(), (d && d.blurb) || 'Gate open'); },
+  onMission: (ms, mi, mc) => missions.applyNet(ms, mi, mc, MP.S.id),
+  onSig: (m) => { if (voice) voice.onSignal(m); },
   onCrate: (st, w, mine) => { const c = world.crate; if (st === 'idle') { if (c.state !== 'idle') closeCrate(); } else if (st === 'roll' && c.state === 'idle') { c.state = 'roll'; c.t = 0; c.pick = w; } else if (st === 'ready' && (c.state === 'idle' || (c.state === 'roll' && c.t < 3.4))) { c.state = 'roll'; c.t = 3.61; c.pick = w; } c.mine = mine; },
   syncUps: (list) => { const ids = new Set(list.map((u) => u[0])); for (let i = G.ups.length - 1; i >= 0; i--) { const u = G.ups[i]; if (u.sid && !ids.has(u.sid)) { scene.remove(u.g); fx.glowBurst(new THREE.Vector3(u.x, 1, u.z), ...PW[u.type].col.map((v) => v * 0.7), 24, 4); G.ups.splice(i, 1); } }
     for (const [id, type, x, z] of list) if (!G.ups.some((u) => u.sid === id)) { spawnPower(type, x, z); G.ups[G.ups.length - 1].sid = id; } },
   onOver: () => { setTimeout(() => { P.dead = true; gameOver(); MP.stop(); $('mpTag').classList.add('hidden'); }, 1500); },
   onQuit: () => toMenu() });
+async function bootVoice() {
+  if (!MP?.on) return;
+  if (!voice) {
+    try {
+      const href = new URL('voice.js', import.meta.url).href;
+      const mod = await import(href);
+      voice = mod.attach({ selfId: () => MP.S.id, selfName: () => MP.S.name, send: (m) => MP.send(m), peers: () => [...MP.S.remotes.keys()], names: () => { const map = new Map(); for (const [id, g] of MP.S.remotes) map.set(id, g.userData.name); return map; }, setTalking: (id, on) => MP.setTalking(id, on), toast, list: $('voiceList'), button: $('btnVoice') });
+    } catch (e) { toast('Voice chat failed to load'); return; }
+  }
+  $('btnVoice').classList.remove('hidden');
+}
+$('btnVoice').onclick = (e) => { e.stopPropagation(); if (voice) voice.toggle(); };
 const coName = () => ($('coName').value || 'Survivor').trim().slice(0, 16);
 $('lobbyReady').onclick = () => { const s = MP.S.snaps.at(-1), me = s && s.p.find((p) => p[0] === MP.S.id); MP.send({ t: 'ready', on: !(me && me[13]) }); };
 $('lobbyLeave').onclick = () => { $('lobby').classList.add('hidden'); toMenu(); };
