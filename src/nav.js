@@ -63,6 +63,30 @@ export function route(from, to, doors) {
   return gates;
 }
 
+// Keep in sync with server/nav.js. Mouth, then a point past the gate plane, lane kept inside the gap.
+export function portalTarget(x, z, mapId, destArea, doors, lane = 0) {
+  const here = areaOf(x, z, mapId);
+  if (!destArea || here === destArea) return null;
+  const path = route(here, destArea, doors);
+  if (!path || !path.length) return null;
+  const g = path[0];
+  const next = g.areas[0] === here ? g.areas[1] : g.areas[0];
+  const crossZ = g.axis !== 'z';
+  const a = standOf(g, here), b = standOf(g, next);
+  const sign = crossZ ? (Math.sign(b.z - a.z) || -1) : (Math.sign(b.x - a.x) || 1);
+  const pos = crossZ ? z : x, plane = crossZ ? g.z : g.x;
+  const progress = (pos - plane) * sign;
+  const half = Math.max(0.25, (g.w || 6) / 2 - 1.05);
+  const lat = Math.max(-half, Math.min(half, lane || 0));
+  // One target, past the plane, so the pack cannot camp on a waypoint short of the gap.
+  const exitAlong = plane + sign * 1.55;
+  return {
+    x: crossZ ? g.x + lat : exitAlong, z: crossZ ? exitAlong : g.z + lat,
+    ex: crossZ ? g.x : exitAlong, ez: crossZ ? exitAlong : g.z,
+    gate: g.id, next, progress, crossZ, gx: g.x, gz: g.z,
+  };
+}
+
 export function gatePrice(door, job) {
   if (!door) return 0;
   if (job && job.gate && job.gate === door.id) return Math.floor(door.price * yard.discount);

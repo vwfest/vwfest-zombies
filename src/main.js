@@ -4,6 +4,7 @@ import { makeTextures, rnd, pick, clamp, lerp, TAU } from './util.js';
 import { World } from './world.js';
 import { activeAreas } from './nav.js';
 import { createMissions } from './missions.js';
+import { createGrenades } from './grenade.js';
 import { buildWorld, getMap, MAPS } from './maps/index.js';
 import { getMode, scaled } from './modes.js';
 import { Zombies } from './zombie.js';
@@ -56,6 +57,7 @@ const fx = new FX(scene, textures, tier);
 const motes = new Motes(textures, 260, { R: 20, y0: 0.3, y1: 6, size: 0.07, alpha: 0.22 }); scene.add(motes.points);
 const mist = new Motes(textures, 46, { R: 55, y0: 0.4, y1: 2.2, size: 5.5, alpha: 0.045, col: [0.55, 0.5, 0.62], additive: false, speed: 0.7 }); scene.add(mist.points);
 const zombies = new Zombies(scene, world, tier);
+const grenades = createGrenades({ scene, world, fx, zombies, sfx, get P() { return P; }, onKill: (z) => { if (!MP?.on) missions?.onKill(z); }, onSelf: (d) => { if (P.dead) return; P.hp -= d; P.lastHit = G.time; if (P.hp <= 0) die(); } });
 window.__hd = upgradeZombies(zombies); addGore(zombies); zombies.cam = cam;
 let mm; const minimap = (dt) => (mm || (mm = makeMinimap(world, zombies, P)))(dt);
 const viewScene = new THREE.Scene(); const post = new Post(renderer, scene, cam, viewScene);
@@ -77,8 +79,8 @@ function cspStyles(root) { root.querySelectorAll('[data-w]').forEach(e => { e.st
 function gunModel(id) { if (!gunCache[id]) { const g = buildViewmodel(id); g.visible = false; gunRoot.add(g); gunCache[id] = g; } return gunCache[id]; }
 
 /* ---------------- state ---------------- */
-const P = { x: 0, z: 12, yaw: 0, pitch: 0, vx: 0, vz: 0, hp: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP, lastHit: -99, pts: 500, kills: 0, heads: 0, bob: 0, rP: 0, rY: 0, shake: 0, dmg: 0, flashlight: true, slots: [], cur: 0, fireCd: 0, reloadT: 0, reloadTot: 0, switchT: 0, kick: 0, mv: 0, sprint: false, heat: 0, dead: false, deadT: 0, sx: 0, sy: 0 };
-const G = { state: 'menu', time: 0, runTime: 0, round: 0, toSpawn: 0, spawnT: 0, interT: 0, phase: 'wait', drops: 0, lastDrop: -99, kills: 0, double: 0, powers: [], ups: [], repairT: 0, healBeat: 0, lastMed: -99, orbit: 0, menuSpawn: 0, flashT: 0, muzzleT: 0 };
+const P = { x: 0, z: 12, yaw: 0, pitch: 0, vx: 0, vz: 0, hp: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP, lastHit: -99, pts: 500, kills: 0, heads: 0, bob: 0, rP: 0, rY: 0, shake: 0, dmg: 0, flashlight: true, slots: [], cur: 0, fireCd: 0, reloadT: 0, reloadTot: 0, switchT: 0, kick: 0, mv: 0, sprint: false, heat: 0, dead: false, deadT: 0, sx: 0, sy: 0, nades: 1 };
+const G = { state: 'menu', time: 0, runTime: 0, round: 0, toSpawn: 0, spawnT: 0, interT: 0, phase: 'wait', drops: 0, lastDrop: -99, kills: 0, double: 0, powers: [], ups: [], repairT: 0, healBeat: 0, lastMed: -99, orbit: 0, menuSpawn: 0, flashT: 0, muzzleT: 0, nadeCd: 0 };
 const input = { f: 0, s: 0, l: 0, r: 0, fire: false, reload: false, interact: false, interactEdge: false, sprint: false };
 const slotOf = (id) => ({ id, mag: WEAPONS[id].mag, reserve: WEAPONS[id].reserve });
 const cur = () => P.slots[P.cur];
@@ -95,7 +97,7 @@ function applyTier(t) {
   scene.environmentIntensity = t === 0 ? 0.45 : 0.3;
   spot.castShadow = t === 2; for (const z of zombies.list) z.root.traverse((o) => { if (o.isMesh) o.castShadow = t > 0; });
   scene.traverse((o) => { if (o.material && !Array.isArray(o.material)) o.material.needsUpdate = true; });
-  document.body.classList.toggle('lowq', t === 0);
+  document.body.classList.toggle('lowq', t === 0); sfx.setMusicDetail?.(t === 0 || isTouch);
   renderer.toneMappingExposure = t === 0 ? 1.15 : 1.05;
   $('fx-damage').style.display = t === 0 ? '' : 'none';
 }
@@ -132,6 +134,7 @@ function updateHUD() {
   const waiting = !!(MP?.on && G.mpPhase === 'lobby');
   if (waiting !== hud.lobby) { hud.lobby = waiting; $('roundBox').classList.toggle('waiting', waiting); $('roundBox').querySelector('.lbl').textContent = waiting ? '' : 'ROUND'; if (waiting) $('roundNum').textContent = 'WAITING'; else hud.round = -1; }
   if (!waiting && G.round !== hud.round) { hud.round = G.round; const e = $('roundNum'); e.textContent = G.round || 1; e.classList.remove('pulse'); void e.offsetWidth; e.classList.add('pulse'); }
+  if ((P.nades || 0) !== hud.nades) { hud.nades = P.nades || 0; const n = $('nadeCnt'); if (n) n.textContent = 'BAIT ' + hud.nades; }
   const rb = $('reloadBar'); if (P.reloadT > 0) { rb.classList.add('on'); rb.firstElementChild.style.width = (100 * (1 - P.reloadT / P.reloadTot)) + '%'; } else rb.classList.remove('on');
   // damage overlays
   const dm = clamp(P.dmg, 0, 1); $('fx-damage').style.opacity = tier === 0 ? Math.min(1, dm + (P.hp < P.maxHp * LOW_HP_FRAC ? 0.25 : 0)) : 0;
@@ -159,7 +162,10 @@ function shoot() {
   s.mag--; P.fireCd = 60 / W.rpm; P.kick = Math.min(1.6, P.kick + 1); P.heat = Math.min(1, P.heat + 0.12); sfx.shot(W.snd);
   aimDir(_d); _o.set(P.x, eyeY(), P.z); _r.set(Math.cos(P.yaw), 0, -Math.sin(P.yaw)); _u.crossVectors(_r, _d).normalize(); _r.crossVectors(_d, _u).normalize(); // _r: right, _u: up
   const spread = W.spread * (1 + P.mv * 0.9 + P.heat * 0.8); const base = _d.clone();
-  cam.updateMatrixWorld(true); P.gun.userData.muzzle.getWorldPosition(_m); P.gun.userData.eject.getWorldPosition(_e);
+  cam.updateMatrixWorld(true);
+  let muzzleObj = P.gun.userData.muzzle;
+  if (W.akimbo && P.gun.userData.muzzles) { s.side = s.side ? 0 : 1; muzzleObj = P.gun.userData.muzzles[s.side]; P.gun.userData.slideSide = s.side; const parent = muzzleObj.parent; if (P.gun.userData.flash && parent) P.gun.userData.flash.position.set(parent.position.x + muzzleObj.position.x, parent.position.y + muzzleObj.position.y, parent.position.z + muzzleObj.position.z); }
+  muzzleObj.getWorldPosition(_m); P.gun.userData.eject.getWorldPosition(_e);
   const hits = new Map(); let wallFx = 0; const mpDirs = [];
   for (let i = 0; i < W.pellets; i++) {
     const a = rnd(TAU), rr = Math.sqrt(Math.random()) * spread; const dir = _d.clone().copy(base).addScaledVector(_r, Math.cos(a) * rr).addScaledVector(_u, Math.sin(a) * rr).normalize(); mpDirs.push([+dir.x.toFixed(4), +dir.y.toFixed(4), +dir.z.toFixed(4)]);
@@ -236,7 +242,8 @@ function updateCrate(dt) {
 function roundCount(r) { return Math.max(3, Math.round((6 + r * 2.3 + r * r * 0.12) * MODE.count)); }
 function startRound(n) {
   G.round = n; G.toSpawn = roundCount(n); G.brutes = n >= 5 ? (n % 5 === 0 ? Math.min(4, 1 + ((n / 5) | 0)) : n >= 7 ? 1 : 0) : 0; G.brutes = Math.round(G.brutes * MODE.brute); G.phase = 'round'; G.spawnT = 1.5; G.drops = 0;
-  sfx.round(n); banner('ROUND ' + n, n === 1 ? 'Board up. Hold the yard.' : 'They are faster this time'); const e = $('roundNum'); e.classList.remove('pulse'); void e.offsetWidth; e.classList.add('pulse');
+  if ((P.nades || 0) < 1) P.nades = 1;
+  const line = sfx.lineFor('wave', '', n); sfx.round(n); sfx.setMusicPhase('hot'); banner('ROUND ' + n, line); if (!MP?.on) sfx.announce(line); const e = $('roundNum'); e.classList.remove('pulse'); void e.offsetWidth; e.classList.add('pulse');
 }
 function activeWindows() { const areas = activeAreas(world.doors); return world.windows.filter((w) => areas.has(w.area)); }
 function trySpawn(dt) {
@@ -261,7 +268,7 @@ function interact(f, held, dt) {
   if (f.type === 'win') { if (held) { G.repairT += dt; if (G.repairT > 0.5) { G.repairT = 0; if (world.addPlank(f.w)) { sfx.repair(); P.pts += 10 * (G.double > 0 ? 2 : 1); popText('+10'); } } } return; }
   if (f.type === 'job' && f.hold) { if (held) { G.repairT += dt; if (G.repairT > 0.5) { G.repairT = 0; missions.use(); } } return; }
   if (!input.interactEdge) return;
-  if (f.type === 'buy') { const owned = P.slots.find((s) => s && s.id === f.b.id); const price = owned ? Math.floor(f.b.price / 2) : f.b.price; if (owned && owned.mag === WEAPONS[owned.id].mag && owned.reserve === WEAPONS[owned.id].reserve) { toast('Ammo already full'); return; } if (P.pts < price) { sfx.deny(); toast('Not enough points'); return; } P.pts -= price; sfx.cash(); giveWeapon(f.b.id); }
+  if (f.type === 'buy') { if (f.b.id === 'nade') { if ((P.nades || 0) >= 2) { toast('Bait pouch is full'); return; } if (P.pts < f.b.price) { sfx.deny(); toast('Not enough points'); return; } P.pts -= f.b.price; P.nades++; sfx.cash(); return; } const owned = P.slots.find((s) => s && s.id === f.b.id); const price = owned ? Math.floor(f.b.price / 2) : f.b.price; if (owned && owned.mag === WEAPONS[owned.id].mag && owned.reserve === WEAPONS[owned.id].reserve) { toast('Ammo already full'); return; } if (P.pts < price) { sfx.deny(); toast('Not enough points'); return; } P.pts -= price; sfx.cash(); giveWeapon(f.b.id); }
   else if (f.type === 'door') { const d = f.door, price = missions.price(d); if (P.pts < price) { sfx.deny(); toast('Not enough points'); return; } P.pts -= price; sfx.cash(); sfx.door(); d.open = true; banner(d.id === 'AB' ? 'GATE OPEN' : d.name.toUpperCase(), d.blurb); }
   else if (f.type === 'job') missions.use();
   else if (f.type === 'crate') crateUse();
@@ -311,7 +318,7 @@ function updateCamera(dt, t) {
   if (P.reloadT > 0 && !WEAPONS[cur().id].perShell) { const q = 1 - P.reloadT / P.reloadTot, e = Math.sin(q * Math.PI); rx -= e * 0.5; oy -= e * 0.12; rz += e * 0.35; ox -= e * 0.04; } else if (P.reloadT > 0) { const e = Math.abs(Math.sin(t * 6)) * 0.5 + 0.3; rx -= 0.25; oy -= 0.05; ry += 0.1 * e; }
   if (P.switchT > 0) { const q = P.switchT / 0.32; oy -= Math.sin(clamp(q, 0, 1) * Math.PI / 2) * 0.35; rx -= q * 0.5; }
   const gs = 1 - Math.exp(-dt * 18); g.userData.rx = lerp(g.userData.rx || 0, rx, gs); g.userData.ry = lerp(g.userData.ry || 0, ry, gs); g.userData.rz = lerp(g.userData.rz || 0, rz, gs);
-  g.rotation.set(g.userData.rx, g.userData.ry, g.userData.rz); if (g.userData.slideT > 0) { g.userData.slideT = Math.max(0, g.userData.slideT - dt * 14); const e = Math.sin(g.userData.slideT * Math.PI); if (g.userData.slide) g.userData.slide.position.z = e * 0.028; if (g.userData.pump) g.userData.pump.position.z = 0; } g.position.set(b.x + ox, b.y + oy, b.z + oz);
+  g.rotation.set(g.userData.rx, g.userData.ry, g.userData.rz); if (g.userData.slideT > 0) { g.userData.slideT = Math.max(0, g.userData.slideT - dt * 14); const e = Math.sin(g.userData.slideT * Math.PI); if (g.userData.slides) { const i = g.userData.slideSide || 0; if (g.userData.slides[i]) g.userData.slides[i].position.z = e * 0.028; } else if (g.userData.slide) g.userData.slide.position.z = e * 0.028; if (g.userData.pump) g.userData.pump.position.z = 0; } g.position.set(b.x + ox, b.y + oy, b.z + oz);
   P.sx *= Math.exp(-dt * 8); P.sy *= Math.exp(-dt * 8);
   // muzzle flash decay
   if (G.muzzleT > 0) { G.muzzleT -= dt; if (G.muzzleT <= 0) { flashSprite.visible = false; if (P.gun?.userData.flash) P.gun.userData.flash.visible = false; } } muzzleLight.intensity *= Math.exp(-dt * 40); if (muzzleLight.intensity < 0.5) muzzleLight.intensity = 0; gunFlash.intensity = muzzleLight.intensity > 0 ? muzzleLight.intensity / 9 : 0;
@@ -345,25 +352,25 @@ function renderScores(el, list) { el.innerHTML = list.length ? list.map((s, i) =
 
 /* ---------------- game flow ---------------- */
 function newGame() {
-  Object.assign(P, { x: MAP.spawn.x, z: MAP.spawn.z, yaw: 0, pitch: 0, vx: 0, vz: 0, hp: PLAYER_MAX_HP, lastHit: -99, pts: MODE.startPts, kills: 0, heads: 0, rP: 0, rY: 0, shake: 0, dmg: 0, cur: 0, fireCd: 0, reloadT: 0, switchT: 0, kick: 0, dead: false, deadT: 0, slots: [slotOf('pistol'), null] });
+  Object.assign(P, { x: MAP.spawn.x, z: MAP.spawn.z, yaw: 0, pitch: 0, vx: 0, vz: 0, hp: PLAYER_MAX_HP, lastHit: -99, pts: MODE.startPts, kills: 0, heads: 0, rP: 0, rY: 0, shake: 0, dmg: 0, cur: 0, fireCd: 0, reloadT: 0, switchT: 0, kick: 0, dead: false, deadT: 0, slots: [slotOf('pistol'), null], nades: 1 });
   Object.assign(G, { time: 0, runTime: 0, round: 0, toSpawn: 0, phase: 'wait', interT: 2.6, drops: 0, double: 0, kills: 0, repairT: 0, lastMed: -99 });
   zombies.reset(); fx.reset(); for (const u of G.ups) scene.remove(u.g); G.ups = []; closeCrate(); world.crate.lid.rotation.x = 0;
   for (const w of world.windows) while (w.count < 6) world.addPlank(w);
   hud.hp = hud.pts = hud.mag = hud.res = -1; hud.name = hud.alt = ''; hud.round = -1; $('hud').classList.remove('hud-dead');
-  world.resetDoors(); if (missions) missions.reset();
+  world.resetDoors(); if (missions) missions.reset(); if (grenades) grenades.reset();
   showGun();
 }
 function startGame() {
-  sfx.init(); newGame(); lb.start(); G.state = 'playing'; showGun(); ['menu', 'over', 'pause'].forEach((i) => $(i).classList.add('hidden')); $('hud').classList.remove('hidden'); $('touch').classList.toggle('hidden', !isTouch);
+  sfx.init(); sfx.musicStart(); sfx.setMusicDetail(tier === 0 || isTouch); newGame(); lb.start(); G.state = 'playing'; showGun(); ['menu', 'over', 'pause'].forEach((i) => $(i).classList.add('hidden')); $('hud').classList.remove('hidden'); $('touch').classList.toggle('hidden', !isTouch);
   beam.visible = tier > 0 && P.flashlight; adaptGrace = 3; fpsAcc = 0; fpsN = 0;
   if (!isTouch && !qs.has('test') && G.mpPhase !== 'lobby') { try { const r = canvas.requestPointerLock?.(); r?.catch?.(() => {}); } catch (e) {} } else if (isTouch && G.mpPhase !== 'lobby') goFull();
   toast(isTouch ? 'Hold E at windows to repair · Open the gate for new guns' : 'Hold E at windows to repair · Open the gate for new guns');
 }
 function pause() { if (G.state !== 'playing' || P.dead) return; G.state = 'paused'; $('pause').classList.remove('hidden'); input.fire = false; input.f = input.s = 0; if (document.pointerLockElement) document.exitPointerLock?.(); setPrompt(''); }
 function resume() { if (G.state !== 'paused') return; G.state = 'playing'; $('pause').classList.add('hidden'); sfx.init(); if (!isTouch && !qs.has('test')) { try { canvas.requestPointerLock?.()?.catch?.(() => {}); } catch (e) {} } }
-function toMenu() { if (voice) voice.leave(); $('btnVoice').classList.add('hidden'); $('voiceList').classList.add('hidden'); if (MP?.on) { MP.stop(); $('mpTag').classList.add('hidden'); } G.mpPhase = ''; G.state = 'menu'; ['pause', 'over', 'lobby'].forEach((i) => $(i).classList.add('hidden')); $('menu').classList.remove('hidden'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); renderScores($('scoreList'), loadScores()); refreshGlobal(); zombies.reset(); if (P.gun) P.gun.visible = false; setPrompt(''); P.dead = false; flashSprite.visible = false; }
+function toMenu() { sfx.musicStop(); if (voice) voice.leave(); $('btnVoice').classList.add('hidden'); $('voiceList').classList.add('hidden'); if (MP?.on) { MP.stop(); $('mpTag').classList.add('hidden'); } G.mpPhase = ''; G.state = 'menu'; ['pause', 'over', 'lobby'].forEach((i) => $(i).classList.add('hidden')); $('menu').classList.remove('hidden'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); renderScores($('scoreList'), loadScores()); refreshGlobal(); zombies.reset(); if (P.gun) P.gun.visible = false; setPrompt(''); P.dead = false; flashSprite.visible = false; }
 function gameOver() {
-  G.state = 'over'; const list = saveScore({ round: Math.max(1, G.round), kills: P.kills, pts: P.pts, t: Date.now() });
+  sfx.musicStop(); G.state = 'over'; const list = saveScore({ round: Math.max(1, G.round), kills: P.kills, pts: P.pts, t: Date.now() });
   $('oRound').textContent = Math.max(1, G.round); $('oKills').textContent = P.kills; $('oHeads').textContent = P.heads; $('oPts').textContent = P.pts.toLocaleString(); const s = Math.floor(G.runTime); $('oTime').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   $('oMsg').textContent = G.round >= 10 ? 'Legendary run. The yard remembers.' : G.round >= 5 ? 'Solid stand. They got you in the end.' : 'The dead took the yard. Try again.'; renderScores($('oScores'), list); setupPost();
   $('over').classList.remove('hidden'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); if (P.gun) P.gun.visible = false;
@@ -394,9 +401,11 @@ function tick(dt) {
   // rounds
   if (MP?.on) MP.update(dt, t, cbs);
   else if (G.phase === 'wait') { G.interT -= dt; if (G.interT <= 0) startRound(1); }
-  else if (G.phase === 'round') { trySpawn(dt); if (G.toSpawn <= 0 && zombies.alive <= 0) { G.phase = 'inter'; G.interT = MODE.inter; } }
+  else if (G.phase === 'round') { trySpawn(dt); if (G.toSpawn <= 0 && zombies.alive <= 0) { const cleared = G.round; G.phase = 'inter'; G.interT = MODE.inter; sfx.setMusicPhase('calm'); if (!MP?.on && missions) missions.onWave(cleared); } }
   else if (G.phase === 'inter') { G.interT -= dt; if (G.interT <= 0) startRound(G.round + 1); }
-  if (!MP?.on) { zombies.update(dt, t, P, world.door, cbs); missions.update(dt); }
+  if (G.state === 'playing') { const mood = G.phase === 'round' ? 'hot' : 'calm'; if (sfx.musicMood !== mood) sfx.setMusicPhase(mood); sfx.pumpMusic(); }
+  if (!MP?.on) { grenades.step(dt); zombies.update(dt, t, P, world.door, cbs); missions.update(dt); } else if (MP.S && MP.S.snaps && MP.S.snaps.length) { const last = MP.S.snaps[MP.S.snaps.length - 1]; grenades.sync(last.ng); const me = last.p && last.p.find((p) => p[0] === MP.S.id); if (me && me.length > 15 && G.nadeCd <= 0) P.nades = me[15]; }
+  grenades.frame(); if (G.nadeCd > 0) G.nadeCd -= dt;
   world.update(dt, t, P); minimap(dt); if (missions) missions.frame(cam); if (voice && voice.joined) voice.tick();
   motes.center = { x: P.x, z: P.z }; mist.center = motes.center; motes.ps.update(dt); mist.ps.update(dt); fx.update(dt); updateCrate(dt);
   // power-ups
@@ -422,9 +431,9 @@ function updateAxes() { input.f = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.Ke
 addEventListener('keydown', (e) => { if (e.target && e.target.tagName === 'INPUT') return;
   if (e.repeat) return; keys[e.code] = true; if (G.state === 'playing' && !P.dead) {
     if (G.mpPhase === 'lobby') { /* code rooms stay in the lobby until the server starts the match */ }
-    else { if (e.code === 'KeyR') input.reload = true; if (e.code === 'KeyE') { input.interact = true; input.interactEdge = true; } if (e.code === 'Digit1') switchTo(0); if (e.code === 'Digit2') switchTo(1); if (e.code === 'KeyQ') switchTo(1 - P.cur); if (e.code === 'KeyF') setFlash(!P.flashlight); if (e.code === 'KeyP') pause(); if (e.code === 'KeyV' && MP?.on && voice) voice.toggle(); }
+    else { if (e.code === 'KeyR') input.reload = true; if (e.code === 'KeyE') { input.interact = true; input.interactEdge = true; } if (e.code === 'Digit1') switchTo(0); if (e.code === 'Digit2') switchTo(1); if (e.code === 'KeyQ') switchTo(1 - P.cur); if (e.code === 'KeyF') setFlash(!P.flashlight); if (e.code === 'KeyP') pause(); if (e.code === 'KeyV' && MP?.on && voice) voice.toggle(); if (e.code === 'KeyG') throwNade(); }
   } else if (G.state === 'paused' && e.code === 'KeyP') resume();
-  if (e.code === 'KeyM') toggleMute(); if (e.code === 'Enter' && (G.state === 'menu' || G.state === 'over')) startGame(); updateAxes();
+  if (e.code === 'KeyM') toggleMute(); if (e.code === 'KeyN') toggleMusic(); if (e.code === 'Enter' && (G.state === 'menu' || G.state === 'over')) startGame(); updateAxes();
 });
 addEventListener('keyup', (e) => { keys[e.code] = false; if (e.code === 'KeyE') input.interact = false; updateAxes(); });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; updateAxes(); input.fire = false; input.interact = false; });
@@ -453,12 +462,23 @@ if (isTouch) {
   const end = (e) => { for (const t of e.changedTouches) { if (t.identifier === stickId) { stickId = null; kn.style.transform = ''; input.s = input.f = 0; } else if (t.identifier === lookId) lookId = null; } };
   touchLayer.addEventListener('touchend', end); touchLayer.addEventListener('touchcancel', end);
   const bind = (id, down, up) => { const b = $(id); b.addEventListener('touchstart', (e) => { b.classList.add('down'); down(); e.preventDefault(); e.stopPropagation(); }, { passive: false }); const u = (e) => { b.classList.remove('down'); up?.(); e.preventDefault(); }; b.addEventListener('touchend', u); b.addEventListener('touchcancel', u); };
-  bind('bFire', () => (input.fire = true), () => (input.fire = false)); bind('bReload', () => (input.reload = true)); bind('bUse', () => { input.interact = true; input.interactEdge = true; }, () => (input.interact = false)); bind('bSwap', () => switchTo(1 - P.cur)); bind('bLamp', () => setFlash(!P.flashlight));
+  bind('bFire', () => (input.fire = true), () => (input.fire = false)); bind('bReload', () => (input.reload = true)); bind('bUse', () => { input.interact = true; input.interactEdge = true; }, () => (input.interact = false)); bind('bSwap', () => switchTo(1 - P.cur)); bind('bLamp', () => setFlash(!P.flashlight)); bind('bNade', () => throwNade());
 }
 function setFlash(on) { P.flashlight = on; spot.visible = on; beam.visible = !!on && tier > 0 && G.state === 'playing' && !P.dead; const b = $('bLamp'); if (b) b.classList.toggle('off', !on); sfx.click(0, on ? 1500 : 800, 0.32); }
 function toggleMute() { sfx.setMuted(!sfx.muted); try { localStorage.setItem('vwz_mute', sfx.muted ? '1' : '0'); } catch (e) {} syncMute(); }
+function toggleMusic() { sfx.setMusicOn(sfx.musicOn === false); try { localStorage.setItem('vwz_music', sfx.musicOn ? '1' : '0'); } catch (e) {} syncMusic(); }
+function syncMusic() { const on = sfx.musicOn !== false; const b = $('btnMusic'); if (b) { b.textContent = on ? '♪' : '♪̸'; b.classList.toggle('on', on); } }
+function throwNade() {
+  if (G.state !== 'playing' || P.dead || (P.nades || 0) <= 0 || G.nadeCd > 0) { if (G.state === 'playing' && (P.nades || 0) <= 0) sfx.deny(); return; }
+  G.nadeCd = 0.4; P.nades--;
+  if (MP?.on) MP.send({ t: 'nade', yaw: +P.yaw.toFixed(3), pitch: +P.pitch.toFixed(3) });
+  else grenades.throwLocal(P.x, eyeY(), P.z, P.yaw, P.pitch - 0.15);
+  sfx.click(0, 180, 0.4);
+}
 function syncMute() { $('btnMute').textContent = sfx.muted ? '🔇' : '🔊'; $('btnMute2').textContent = sfx.muted ? '🔇 Sound off' : '🔊 Sound on'; }
 $('btnMute').onclick = $('btnMute2').onclick = (e) => { e.stopPropagation(); toggleMute(); };
+try { if (localStorage.getItem('vwz_music') === '0') sfx.musicOn = false; } catch (e) {}
+if ($('btnMusic')) $('btnMusic').onclick = (e) => { e.stopPropagation(); toggleMusic(); };
 $('btnPause').onclick = (e) => { e.stopPropagation(); pause(); };
 $('btnPlay').onclick = startGame; $('btnAgain').onclick = startGame; $('btnMenu').onclick = toMenu; $('btnResume').onclick = resume; $('btnQuit').onclick = toMenu;
 $('btnPlay').addEventListener('touchend', (e) => { e.preventDefault(); startGame(); });
@@ -470,7 +490,7 @@ $('mapSeg').addEventListener('click', (e) => { const b = e.target.closest('butto
 [...$('mapSeg').querySelectorAll('button')].forEach((x) => x.classList.toggle('on', x.dataset.map === MAP.id));
 
 /* ---------------- boot ---------------- */
-P.slots = [slotOf('pistol'), null]; showGun(); applyTier(tier); syncMute(); renderScores($('scoreList'), loadScores()); refreshGlobal();
+P.slots = [slotOf('pistol'), null]; showGun(); applyTier(tier); syncMute(); syncMusic(); renderScores($('scoreList'), loadScores()); refreshGlobal();
 zombies.max = MAP.cap[tier > 0 ? 1 : 0];
 for (let i = 0; i < 40; i++) tick(0.05);
 requestAnimationFrame(() => { post.render(0.016, 0, 0, 0); $('loading').classList.add('done'); setTimeout(() => $('loading').remove(), 800); });
@@ -486,11 +506,11 @@ function mpInteract(f, held, dt) { // co-op: ask the server; it checks distance 
 }
 /* ---------------- co-op ---------------- */
 const MP_URL = qs.get('server') || 'wss://vwfest-zombies-coop.onrender.com';
-MP = createMP({ scene, zombies, P, G, cam, world,
+MP = createMP({ scene, zombies, P, G, cam, world, held: () => (P.slots[P.cur] && P.slots[P.cur].id) || 'pistol',
   onJoined: (m) => { G.mpPhase = m.phase || ''; startGame(); G.round = 0; $('mpTag').textContent = 'CO-OP · ROOM ' + m.room; $('mpTag').classList.remove('hidden'); bootVoice(); if (m.phase === 'lobby') { $('lobbyCode').textContent = m.room; $('lobby').classList.remove('hidden'); $('toast').classList.remove('on'); clearTimeout(toastT); } else toast('Co-op room ' + m.room + ' · share the code with friends'); },
   onLobby: (snap) => { const was = G.mpPhase; G.mpPhase = snap.phase; const waiting = snap.phase === 'lobby'; $('lobby').classList.toggle('hidden', !waiting); if (was === 'lobby' && !waiting && !isTouch && !qs.has('test')) { try { canvas.requestPointerLock?.()?.catch?.(() => {}); } catch (e) {} } if (!waiting) return; $('lobbyCode').textContent = snap.room || MP.S.room || '-----'; const me = snap.p.find((p) => p[0] === MP.S.id); $('lobbyReady').textContent = me && me[13] ? 'UNREADY' : 'READY'; $('lobbyRoster').innerHTML = snap.p.map((p) => { const st = !p[10] ? 'disconnected' : p[13] ? 'ready' : 'waiting'; const nm = String(p[1]).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); return `<li class="${p[13] ? 'ok' : 'wait'}">${nm}${p[0] === MP.S.id ? ' (you)' : ''} · ${st}</li>`; }).join(''); },
   onStatus: (s) => { toast(String(s)); const e = $('coMsg'); if (e) e.textContent = String(s); if (s === 'Reconnected' && voice) voice.rebuild(); },
-  onRound: (n) => { G.round = n; G.phase = 'round'; sfx.round(n); banner('ROUND ' + n, 'Co-op · hold the yard together'); },
+  onRound: (n) => { G.round = n; G.phase = 'round'; const line = sfx.lineFor('wave', '', n); sfx.round(n); sfx.setMusicPhase('hot'); banner('ROUND ' + n, line); sfx.announce(line); if ((P.nades || 0) < 1) P.nades = 1; },
   onHurt: (d) => { P.lastHit = G.time; P.dmg = Math.max(P.dmg, 0.65 + 0.35 * (1 - Math.max(0, P.hp) / P.maxHp)); P.shake = 1; sfx.hurt(); },
   onDown: () => { die(); toast('You are down. Teammates revive you if they clear the round'); },
   onRevive: () => { $('specTag').classList.add('hidden'); P.dead = false; P.deadT = 0; $('hud').classList.remove('hud-dead'); showGun(); toast('Back on your feet'); },
@@ -502,9 +522,10 @@ MP = createMP({ scene, zombies, P, G, cam, world,
       if (e.type === 'nuke') { sfx.boom(); P.shake = 1; $('fx-flash').style.transition = 'none'; $('fx-flash').style.opacity = 0.85; requestAnimationFrame(() => { $('fx-flash').style.transition = 'opacity 1.2s'; $('fx-flash').style.opacity = 0; }); } }
     else if (e.e === 'plank' && e.by === MP.S.id) { G.mpRepairs = (G.mpRepairs || 0) + 1; sfx.repair(); popText('+10'); }
     else if (e.e === 'mission') missions.onNetEvent(e);
+    else if (e.e === 'boom') grenades.splatter(e.x, e.z);
     else if (e.e === 'crate' && e.s === 'shut') toast('The toolbox slammed shut'); },
-  onAct: (m) => { if (!m.ok) { if (m.why === 'pts') { sfx.deny(); toast('Not enough points'); } else if (m.why === 'not-yours') toast('That weapon belongs to a teammate'); return; }
-    if (m.a === 'buy') { sfx.cash(); giveWeapon(m.w); } else if (m.a === 'door') sfx.cash(); else if (m.a === 'crate') { sfx.cash(); if (m.s === 'roll') { sfx.open(); sfx.jingle(4); } else if (m.s === 'take') { giveWeapon(m.w); banner(WEAPONS[m.w].name.toUpperCase()); } } },
+  onAct: (m) => { if (!m.ok) { if (m.a === 'nade') P.nades++; if (m.why === 'pts') { sfx.deny(); toast('Not enough points'); } else if (m.why === 'full') toast('Bait pouch is full'); else if (m.why === 'not-yours') toast('That weapon belongs to a teammate'); return; }
+    if (m.a === 'buy') { sfx.cash(); if (m.w === 'nade') P.nades = m.nades; else giveWeapon(m.w); } else if (m.a === 'door') sfx.cash(); else if (m.a === 'crate') { sfx.cash(); if (m.s === 'roll') { sfx.open(); sfx.jingle(4); } else if (m.s === 'take') { giveWeapon(m.w); banner(WEAPONS[m.w].name.toUpperCase()); } } },
   onPlank: (w, off) => { if (off) cbs.plank(w, true); },
   onDoor: (d) => { sfx.door(); banner(!d || d.id === 'AB' ? 'GATE OPEN' : d.name.toUpperCase(), (d && d.blurb) || 'Gate open'); },
   onMission: (ms, mi, mc) => missions.applyNet(ms, mi, mc, MP.S.id),
@@ -532,4 +553,4 @@ $('lobbyLeave').onclick = () => { $('lobby').classList.add('hidden'); toMenu(); 
 $('coQuick').onclick = () => MP.connect({ url: MP_URL, name: coName(), join: { map: MAP.id } });
 $('coCreate').onclick = () => MP.connect({ url: MP_URL, name: coName(), join: { create: true, map: MAP.id } });
 $('coJoin').onclick = () => { const c = $('coCode').value.trim().toUpperCase(); if (!/^[A-Z2-9]{5}$/.test(c)) { $('coMsg').textContent = 'Room codes are 5 letters/numbers'; return; } MP.connect({ url: MP_URL, name: coName(), join: { code: c } }); };
-window.__game = { MP, get MODE() { return MODE; }, MAP, MAPS, PLAYER_MAX_HP, MEDKIT_HP_FRAC, MEDKIT_COOLDOWN, MEDKIT_HEAL_FRAC, medKitReady, medKitOnKill, G, P, world, zombies, fx, input, tick, startGame, shoot, applyTier, switchTo, startReload, pause, resume, toMenu, giveWeapon, spawnPower, pickPower, interact, findFocus, die, get tier() { return tier; }, cam, renderer, scene, WEAPONS, sfx, renderOnce, aimAt(z, head = false) { const dx = z.pos.x - P.x, dz = z.pos.z - P.z, dy = (head ? 1.66 : 1.0) * z.scale - 1.7; P.yaw = Math.atan2(-dx, -dz); P.pitch = Math.atan2(dy, Math.hypot(dx, dz)); P.rP = P.rY = 0; }, isTouch };
+window.__game = { MP, missions, grenades, get MODE() { return MODE; }, MAP, MAPS, PLAYER_MAX_HP, MEDKIT_HP_FRAC, MEDKIT_COOLDOWN, MEDKIT_HEAL_FRAC, medKitReady, medKitOnKill, G, P, world, zombies, fx, input, tick, startGame, shoot, applyTier, switchTo, startReload, pause, resume, toMenu, giveWeapon, spawnPower, pickPower, interact, findFocus, die, get tier() { return tier; }, cam, renderer, scene, WEAPONS, sfx, renderOnce, aimAt(z, head = false) { const dx = z.pos.x - P.x, dz = z.pos.z - P.z, dy = (head ? 1.66 : 1.0) * z.scale - 1.7; P.yaw = Math.atan2(-dx, -dz); P.pitch = Math.atan2(dy, Math.hypot(dx, dz)); P.rP = P.rY = 0; }, isTouch };

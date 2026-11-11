@@ -79,6 +79,9 @@ body.touch #touch button{display:flex;align-items:center;justify-content:center}
 #bUse{right:calc(env(safe-area-inset-right) + 40px);bottom:calc(env(safe-area-inset-bottom) + 150px);width:62px;height:62px;border-color:var(--acc)!important}
 #bSwap{right:calc(env(safe-area-inset-right) + 120px);bottom:calc(env(safe-area-inset-bottom) + 108px);width:50px;height:50px}
 #bLamp{right:calc(env(safe-area-inset-right) + 188px);bottom:calc(env(safe-area-inset-bottom) + 176px);width:48px;height:48px;font-size:18px}
+#bNade{right:calc(env(safe-area-inset-right) + 200px);bottom:calc(env(safe-area-inset-bottom) + 28px);width:54px;height:54px;border-color:#ff5a6e!important;font-size:20px}
+#nadeCnt{font-size:11px;letter-spacing:.16em;font-weight:800;color:#ff5a6e;margin-top:2px}
+#btnMusic.on{color:var(--acc);border-color:var(--acc)}
 #bLamp.off{opacity:.42;filter:grayscale(1)}
 body.touch #toast{top:128px;max-width:min(420px,54vw);white-space:normal;text-align:center;line-height:1.35}
 body.touch #statR{bottom:auto;top:62px;right:16px;min-width:0;padding:6px 12px;transform-origin:top right;transform:scale(.8)}

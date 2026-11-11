@@ -95,6 +95,7 @@ export class World {
     }
     // ---- wall-buys, crate, scenery ----
     this.wallBuy('smg', -14, DOOR_Z + 0.25, 0); this.wallBuy('shotgun', 23.75, -15, -Math.PI / 2); this.wallBuy('rifle', -23.75, -44, Math.PI / 2);
+    this.wallBuy('akimbo', 23.75, 8, -Math.PI / 2); this.wallBuy('lever', -23.75, -32, Math.PI / 2); this.wallBuy('nailer', 10, 23.65, Math.PI); this.nadeBuy(4, 16.2, 0);
     this.wallBuy('smg', 49.65, 12, -Math.PI / 2); this.wallBuy('shotgun', -49.65, -16, Math.PI / 2); this.wallBuy('rifle', 18, -75.65, 0);
     this.buildCrate(-17.5, 14.5);
     this.scenery();
@@ -255,7 +256,18 @@ export class World {
     this.box(1.4, 2.1, 0.1, x - 1.2, 1.05, z + d / 2 + 0.05, M.wood, { cast: false }); const win = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.9), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 1.7, 0.7), toneMapped: false })); win.position.set(x + 1.5, 1.8, z + d / 2 + 0.03); this.staticGroup.add(win);
   }
   // ---- wall buys ----
+  nadeBuy(x, z, rotY) {
+    const g = new THREE.Group(); g.position.set(x, 1.7, z); g.rotation.y = rotY;
+    const can = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), new THREE.MeshStandardMaterial({ color: 0x8a1018, roughness: 0.4 })); can.position.set(0, 0.35, 0.2);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.1, 6), new THREE.MeshStandardMaterial({ color: 0xff2a3a, emissive: 0x4a0008 })); cap.position.set(0, 0.58, 0.2);
+    const lab = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.2), new THREE.MeshBasicMaterial({ map: labelTex([{ t: 'BLOOD BAIT', s: 48, y: 88, w: 800, c: '#ff5a6e' }, { t: '$250  ·  G TO THROW', s: 32, y: 168, c: '#ffd36b' }], '#ff5a6e'), toneMapped: false })); lab.position.set(0, -0.35, 0.04);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.2, 0.08), this.M.fenceDark); back.position.set(0, 0.05, 0);
+    g.add(back, lab, can, cap); this.root.add(g);
+    const nx = Math.sin(rotY), nz = Math.cos(rotY);
+    this.buys.push({ id: 'nade', price: 250, pos: { x: x + nx * 0.9, z: z + nz * 0.9 }, name: 'Blood Bait' });
+  }
   wallBuy(id, x, z, rotY) {
+    if (id === 'nade') { this.nadeBuy(x, z, rotY); return; }
     const W = WEAPONS[id]; const g = new THREE.Group(); g.position.set(x, 1.7, z); g.rotation.y = rotY;
     const lab = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.2), new THREE.MeshBasicMaterial({ map: labelTex([{ t: W.name.toUpperCase(), s: 44, y: 88, w: 800 }, { t: '$' + W.price + '  ·  AMMO $' + Math.floor(W.price / 2), s: 36, y: 168, c: '#ffd36b' }]), toneMapped: false, color: new THREE.Color(0.9, 0.9, 0.9) })); lab.position.set(0, -0.35, 0.04);
     const gun = buildViewmodel(id, false); gun.position.set(0, 0.35, 0.18); gun.rotation.y = Math.PI / 2; gun.scale.setScalar(1.7); gun.userData.base = null;

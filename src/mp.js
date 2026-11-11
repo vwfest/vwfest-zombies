@@ -11,10 +11,13 @@ export function createMP(ctx) {
   function remoteMesh(name, i) { const g = new THREE.Group(), m = new THREE.MeshStandardMaterial({ color: COLS[i % 4], roughness: 0.6 });
     const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 0.9, 4, 10), m); body.position.y = 0.95; const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), new THREE.MeshStandardMaterial({ color: 0xd9b38c })); head.position.y = 1.68;
     const gun = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.5), new THREE.MeshStandardMaterial({ color: 0x222 })); gun.position.set(0.25, 1.35, -0.3);
+    const gun2 = gun.clone(); gun2.position.set(-0.22, 1.32, -0.26); gun2.visible = false;
     const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64; const c2 = cv.getContext('2d'); c2.font = '800 34px system-ui,sans-serif'; c2.textAlign = 'center'; c2.fillStyle = '#' + COLS[i % 4].toString(16).padStart(6, '0'); c2.fillText(name, 128, 44);
     const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false })); tag.scale.set(1.2, 0.3, 1); tag.position.y = 2.2;
     const talk = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: 0x18ffb0 })); talk.position.y = 2.45; talk.visible = false;
-    g.add(body, head, gun, tag, talk); g.userData = { body, gun, name, talk }; scene.add(g); return g; }
+    g.add(body, head, gun, gun2, tag, talk); g.userData = { body, gun, gun2, name, talk, gunId: 'pistol' }; scene.add(g); return g; }
+  const SIL = { pistol: [0.7, 0.8, 0.55, 0x222222], akimbo: [0.7, 0.8, 0.5, 0xc8c8c8], smg: [0.85, 1, 0.85, 0x333333], shotgun: [0.8, 0.8, 1.4, 0x3a2a1c], sawed: [1.3, 0.9, 0.62, 0x222222], rifle: [0.7, 0.9, 1.55, 0x2a2a2a], lever: [0.65, 0.8, 1.7, 0x6b3a1f], nailer: [1.2, 1.2, 0.7, 0xd9792a], lmg: [1.2, 1.2, 1.6, 0x1a1a1a] };
+  function dressGun(g, id) { const key = SIL[id] ? id : 'pistol'; if (g.userData.gunId === key) return; g.userData.gunId = key; const s = SIL[key]; g.userData.gun.scale.set(s[0], s[1], s[2]); g.userData.gun.material.color.setHex(s[3]); g.userData.gun2.visible = key === 'akimbo'; if (key === 'akimbo') g.userData.gun2.material.color.setHex(s[3]); }
   function connect(opts) { S.url = opts.url; S.name = opts.name || S.name; S.joinMsg = opts.join; open(); }
   function open() { let ws; try { ws = new WebSocket(S.url); } catch (e) { return fail('bad server url'); } S.ws = ws; S.status = 'connecting';
     ws.onopen = () => { S.retry = 0; ws.send(JSON.stringify(S.token ? { t: 'join', token: S.token } : { t: 'join', name: S.name, ...S.joinMsg })); };
@@ -36,7 +39,7 @@ export function createMP(ctx) {
   // pick the two snapshots around (now - DELAY)
   function frameAt(now) { const rt = now - DELAY, a = S.snaps; if (!a.length) return null; let i = a.length - 1; while (i > 0 && a[i - 1].recv > rt) i--; const s1 = a[i], s0 = a[Math.max(0, i - 1)]; if (s0 === s1 || s1.recv <= s0.recv) return { s0: s1, s1, k: 1 }; return { s0, s1, k: Math.max(0, Math.min(1, (rt - s0.recv) / (s1.recv - s0.recv))) }; }
   function update(dt, t, cbs) {
-    const now = performance.now(); if (now - S.lastSend > SEND_MS && !P.dead) { S.lastSend = now; send({ t: 'in', x: +P.x.toFixed(2), z: +P.z.toFixed(2), yaw: +P.yaw.toFixed(3), pitch: +P.pitch.toFixed(3) }); }
+    const now = performance.now(); if (now - S.lastSend > SEND_MS && !P.dead) { S.lastSend = now; send({ t: 'in', x: +P.x.toFixed(2), z: +P.z.toFixed(2), yaw: +P.yaw.toFixed(3), pitch: +P.pitch.toFixed(3), w: ctx.held?.() || 'pistol' }); }
     const f = frameAt(now); if (!f) { zombies.update(dt, t, P, ctx.world.door, cbs); return; } const { s0, s1, k } = f, last = S.snaps[S.snaps.length - 1];
     // self: authoritative hp / points / round, correct big drifts
     const me = last.p.find((p) => p[0] === S.id); if (me) { const hp = me[6]; if (hp < P.hp - 0.5) ctx.onHurt?.(P.hp - hp); P.hp = hp; P.pts = me[7]; P.kills = me[8]; if (me[9] && !P.dead) ctx.onDown?.(); else if (!me[9] && P.dead) ctx.onRevive?.(); if (Math.hypot(me[2] - P.x, me[3] - P.z) > 2.5) { P.x = me[2]; P.z = me[3]; }
@@ -52,7 +55,7 @@ export function createMP(ctx) {
     // remote players
     const seen = new Set(); const p0 = new Map(s0.p.map((p) => [p[0], p]));
     s1.p.forEach((p, i) => { if (p[0] === S.id) return; seen.add(p[0]); let g = S.remotes.get(p[0]); if (!g) { g = remoteMesh(p[1], i); S.remotes.set(p[0], g); } const a = p0.get(p[0]) || p;
-      g.position.set(lerp(a[2], p[2], k), 0, lerp(a[3], p[3], k)); g.rotation.y = lerpAng(a[4], p[4], k); g.userData.body.rotation.x = p[9] ? -1.4 : 0; g.position.y = p[9] ? 0.3 : 0; g.visible = true; g.userData.body.material.opacity = p[10] ? 1 : 0.4; g.userData.body.material.transparent = !p[10]; });
+      g.position.set(lerp(a[2], p[2], k), 0, lerp(a[3], p[3], k)); g.rotation.y = lerpAng(a[4], p[4], k); dressGun(g, p[14]); g.userData.body.rotation.x = p[9] ? -1.4 : 0; g.position.y = p[9] ? 0.3 : 0; g.visible = true; g.userData.body.material.opacity = p[10] ? 1 : 0.4; g.userData.body.material.transparent = !p[10]; });
     for (const [id, g] of S.remotes) if (!seen.has(id)) { scene.remove(g); S.remotes.delete(id); }
     // zombies: map server ids onto the local pool, then let the local animator pose them (no local AI movement)
     const z0 = new Map(s0.z.map((z) => [z[0], z])), live = new Set();
