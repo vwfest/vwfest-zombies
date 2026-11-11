@@ -3,6 +3,10 @@ import * as THREE from 'three';
 import { YARD, areaOf } from './nav.js';
 
 const $ = (id) => document.getElementById(id);
+const ORDER = [
+  { id: 'fuel', wave: 1 }, { id: 'carb', wave: 2 }, { id: 'bus', wave: 3 },
+  { id: 'parts', wave: 4 }, { id: 'radio', wave: 5 }, { id: 'clear', wave: 5 },
+];
 
 function copyJob(i) {
   const def = YARD.jobs[i];
@@ -23,7 +27,7 @@ function detail(s, pid) {
 
 export function createMissions(ctx) {
   const { world, P, G, sfx, banner, toast, popText, spawnPower } = ctx;
-  const state = { mode: 'sp', job: null, pid: 'you' };
+  const state = { mode: 'sp', job: null, pid: 'you', unlocked: [], done: new Set(), gap: false, gapWave: 0, lastArea: '', waves: 0 };
   const beacon = new THREE.Group();
   const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 7, 5), new THREE.MeshBasicMaterial({ color: 0xffd36b, transparent: true, opacity: 0.9, depthWrite: false }));
   pole.position.y = 3.5; pole.userData.noAO = true;
@@ -48,6 +52,28 @@ export function createMissions(ctx) {
     syncMeshes();
     if (!state.job && state.mode === 'sp') toast('All objectives complete');
   }
+  function tryStart() {
+    if (state.job || state.gap || state.mode !== 'sp' || world.mapId !== 'junkyard') return false;
+    const next = ORDER.find((row) => state.unlocked.includes(row.id) && !state.done.has(row.id));
+    if (!next) return false;
+    begin(YARD.jobs.findIndex((j) => j.id === next.id));
+    return !!state.job;
+  }
+  function onWave(n) {
+    if (state.mode !== 'sp' || world.mapId !== 'junkyard') return false;
+    state.waves = Math.max(state.waves, n | 0);
+    for (const row of ORDER) if (row.wave <= state.waves && !state.unlocked.includes(row.id)) state.unlocked.push(row.id);
+    if (state.gap) {
+      const next = ORDER.find((row) => state.unlocked.includes(row.id) && !state.done.has(row.id));
+      const def = next && YARD.jobs.find((j) => j.id === next.id);
+      const same = !!(def && def.area === state.lastArea);
+      if (same ? state.waves > state.gapWave : state.waves >= state.gapWave) state.gap = false;
+    }
+    if (!tryStart()) return false;
+    banner('NEW MISSION AVAILABLE', state.job.title);
+    sfx.announce?.(sfx.lineFor?.('mission', state.job.id, G.round));
+    return true;
+  }
   function finish() {
     const s = state.job; if (!s || state.mode !== 'sp') return;
     const g = s.gate && world.doors.find((d) => d.id === s.gate);
@@ -57,9 +83,10 @@ export function createMissions(ctx) {
     for (const sl of P.slots) if (sl && ctx.weapons[sl.id]) { sl.mag = ctx.weapons[sl.id].mag; sl.reserve = ctx.weapons[sl.id].reserve; }
     if (s.power) spawnPower(s.power, s.pad.x, s.pad.z);
     popText('+' + pts); banner(s.title.toUpperCase(), g ? g.blurb : 'Objective complete'); sfx.cash(); if (g) sfx.door();
-    begin(s.index + 1);
+    sfx.announce?.(sfx.lineFor?.('done', s.id, G.round));
+    state.done.add(s.id); state.lastArea = s.area; state.gap = true; state.gapWave = G.round; state.job = null; syncMeshes();
   }
-  function reset() { state.mode = 'sp'; state.pid = 'you'; if (world.mapId !== 'junkyard') { state.job = null; syncMeshes(); return; } begin(0); }
+  function reset() { state.mode = 'sp'; state.pid = 'you'; state.job = null; state.unlocked = []; state.done = new Set(); state.gap = false; state.gapWave = 0; state.lastArea = ''; state.waves = 0; syncMeshes(); }
   function update(dt) {
     if (state.mode !== 'sp' || !state.job || G.state !== 'playing') return;
     const s = state.job;
@@ -119,7 +146,9 @@ export function createMissions(ctx) {
   function onNetEvent(e) {
     if (!e || e.e !== 'mission') return;
     const def = YARD.jobs.find((j) => j.id === e.id);
+    if (e.start) { banner('NEW MISSION AVAILABLE', def ? def.title : ''); sfx.announce?.(sfx.lineFor?.('mission', e.id, G.round)); return; }
     banner((def ? def.title : 'OBJECTIVE').toUpperCase(), def && def.gate ? 'Gate open' : 'Objective complete');
+    sfx.announce?.(sfx.lineFor?.('done', e.id, G.round));
     sfx.cash(); if (def && def.gate) sfx.door();
     for (const sl of P.slots) if (sl && ctx.weapons[sl.id]) { sl.mag = ctx.weapons[sl.id].mag; sl.reserve = ctx.weapons[sl.id].reserve; }
   }
@@ -174,5 +203,5 @@ export function createMissions(ctx) {
     arrow.style.transform = `translate(-50%,-50%) rotate(${ang + Math.PI / 4}rad)`;
   }
   reset();
-  return { reset, update, use, onKill, drop, applyNet, onNetEvent, focus, price, frame, get job() { return state.job; } };
+  return { reset, update, use, onKill, drop, applyNet, onNetEvent, onWave, focus, price, frame, get job() { return state.job; } };
 }

@@ -126,6 +126,7 @@ function createServer(opts = {}) {
       if (m.t === 'in') r.input(sess.pid, m, now);
       else if (m.t === 'ready') r.setReady(sess.pid, m.on === true || m.on === 1);
       else if (m.t === 'shot') { const res = r.shoot(sess.pid, m, now); if (res.ok && res.hits.length) send(ws, { t: 'hits', h: res.hits }); else if (!res.ok) send(ws, { t: 'act', a: 'shot', ...res }); }
+      else if (m.t === 'nade') send(ws, { t: 'act', a: 'nade', ...r.throwNade(sess.pid, m) });
       else if (m.t === 'reload') { const res = r.reload(sess.pid, String(m.w || '')); if (!res.ok && res.why !== 'full' && res.why !== 'busy') send(ws, { t: 'act', a: 'reload', ...res }); }
       else if (m.t === 'buy') send(ws, { t: 'act', a: 'buy', ...r.buy(sess.pid, String(m.w)) });
       else if (m.t === 'door') send(ws, { t: 'act', a: 'door', ...r.openDoor(sess.pid, typeof m.id === 'string' ? m.id : 'AB') });

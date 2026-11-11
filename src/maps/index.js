@@ -46,7 +46,7 @@ const LAYOUTS = {
       ['beetle', 0xcfcfc4, -10, -34, Math.PI / 2, { missing: true }], ['bus', 0x8aa84a, 8, -38, 0], ['tires', 5, 14, -28], ['crate', 1.0, -15, -41]],
     shacks: [[0, -10, 8, 3]],
     lamps: [[-14, -20, 0, 0.2], [14, -20, 1, 2.9], [-8, 2, 0, 0.5], [9, -6, 1, 2.6], [-6, -18, 0, 0], [0, -34, 1, 1.2], [12, -42, 0, 3]],
-    buys: [['smg', -10, DOOR_Z + 0.25, 0], ['shotgun', 15.75, -4, -Math.PI / 2], ['rifle', -17.75, -36, Math.PI / 2]], crate: [-12, -8] },
+    buys: [['smg', -10, DOOR_Z + 0.25, 0], ['akimbo', 8, DOOR_Z + 0.25, 0], ['nade', -2, 2, Math.PI], ['shotgun', 15.75, -4, -Math.PI / 2], ['rifle', -17.75, -36, Math.PI / 2]], crate: [-12, -8] },
   // Large: A is 64x46, B is 64x26 → long sightlines, more windows, bigger hordes.
   drivein: { w: 32, s: 22, n: -50, wb: 32,
     south: [{ c: -18, id: 'S1' }, { c: 0, id: 'S2' }, { c: 18, id: 'S3' }], eastA: [{ c: 6, id: 'E1' }, { c: -14, id: 'E1b' }], westA: [{ c: 8, id: 'W1' }, { c: -12, id: 'W1b' }],
@@ -56,7 +56,7 @@ const LAYOUTS = {
       ['bus', 0x8aa84a, -14, -38, Math.PI / 2], ['beetle', 0xcfcfc4, 14, -36, 0, { missing: true }], ['tires', 4, 0, -44], ['crate', 1.0, 26, -46]],
     shacks: [[0, -16, 10, 4]],
     lamps: [[-24, 18, 0, 0.6], [24, 18, 0, 2.6], [-20, -8, 1, 0], [20, -8, 1, 3], [0, 0, 0, 1], [-20, -36, 0, 0.3], [20, -44, 1, 3]],
-    buys: [['smg', -14, DOOR_Z + 0.25, 0], ['shotgun', 31.75, -4, -Math.PI / 2], ['rifle', -31.75, -30, Math.PI / 2]], crate: [-24, 4] },
+    buys: [['smg', -14, DOOR_Z + 0.25, 0], ['akimbo', 6, DOOR_Z + 0.25, 0], ['nade', 2, 8, 0], ['shotgun', 31.75, -4, -Math.PI / 2], ['rifle', -31.75, -30, Math.PI / 2]], crate: [-24, 4] },
 };
 
 export function buildWorld(scene, T, tier, id) {

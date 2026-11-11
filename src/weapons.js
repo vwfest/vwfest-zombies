@@ -7,8 +7,12 @@ export const WEAPONS = {
   shotgun: { id: 'shotgun', name: 'Sidewinder 12g', dmg: 17, rpm: 78, auto: false, mag: 6, reserve: 42, reload: 0.5, perShell: true, spread: 0.055, pellets: 9, kick: 0.04, shake: 0.4, price: 1200, head: 2.0, snd: 'shotgun', range: 30 },
   rifle: { id: 'rifle', name: 'Ridgeback AR', dmg: 42, rpm: 620, auto: true, mag: 30, reserve: 150, reload: 1.9, spread: 0.007, pellets: 1, kick: 0.013, shake: 0.18, price: 1800, head: 2.6, snd: 'rifle', range: 120 },
   lmg: { id: 'lmg', name: 'Hog Hammer LMG', dmg: 40, rpm: 700, auto: true, mag: 100, reserve: 300, reload: 3.8, spread: 0.012, pellets: 1, kick: 0.012, shake: 0.2, price: 0, crateOnly: true, head: 2.4, snd: 'lmg', range: 110 },
+  akimbo: { id: 'akimbo', name: 'Twin Dustdevils', dmg: 26, rpm: 500, auto: false, mag: 24, reserve: 96, reload: 1.7, spread: 0.009, pellets: 1, kick: 0.008, shake: 0.1, price: 750, head: 2.6, snd: 'akimbo', range: 70, akimbo: true },
+  lever: { id: 'lever', name: 'Barn Lever', dmg: 70, rpm: 55, auto: false, mag: 7, reserve: 35, reload: 0.48, perShell: true, spread: 0.002, pellets: 1, kick: 0.02, shake: 0.16, price: 1500, head: 3, snd: 'lever', range: 110 },
+  nailer: { id: 'nailer', name: 'Shop Nailer', dmg: 14, rpm: 900, auto: true, mag: 36, reserve: 144, reload: 1.5, spread: 0.022, pellets: 1, kick: 0.003, shake: 0.05, price: 800, head: 1.4, snd: 'nailer', range: 22 },
+  sawed: { id: 'sawed', name: 'Sawed-off', dmg: 24, rpm: 200, auto: false, mag: 2, reserve: 20, reload: 1.7, spread: 0.11, pellets: 8, kick: 0.06, shake: 0.55, price: 0, crateOnly: true, head: 1.5, snd: 'sawed', range: 14 },
 };
-export const CRATE_POOL = ['smg', 'shotgun', 'rifle', 'lmg'];
+export const CRATE_POOL = ['smg', 'shotgun', 'rifle', 'lmg', 'sawed', 'lever'];
 
 const metal = new THREE.MeshStandardMaterial({ color: 0x2c2f35, metalness: 0.9, roughness: 0.34 });
 const metal2 = new THREE.MeshStandardMaterial({ color: 0x55595f, metalness: 0.85, roughness: 0.28 });

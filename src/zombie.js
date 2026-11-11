@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { rnd, pick, clamp, TAU } from './util.js';
 import { areaOf } from './world.js';
-import { activeAreas, route, standOf } from './nav.js';
+import { activeAreas, portalTarget } from './nav.js';
 import { ZOMBIE_DMG, BRUTE_DMG } from './balance.js';
 
 const G = {
@@ -49,7 +49,7 @@ export class Zombies {
     z.maxHp = z.hp = st.hp * (brute ? 3.3 : 1); z.speed = st.sp * rnd(0.82, 1.12) * (runner ? 1.45 : 1) * (brute ? 0.78 : 1); z.speed = Math.min(z.speed, 6.0); z.runner = runner; z.dmg = brute ? BRUTE_DMG : ZOMBIE_DMG; z.value = brute ? 150 : 60;
     z.sk.color.setHex(brute ? 0x9a6f5a : pick(SKINS)); z.sh.color.setHex(pick(SHIRTS)); z.pa.color.setHex(pick(PANTS));
     for (const m of [z.sk, z.sh, z.pa]) m.emissive.setHex(0);
-    z.win = w; z.state = 'approach'; z.slot = rnd(-1.2, 1.2); z.phase = rnd(TAU); z.attackT = 0; z.cool = 0; z.stuck = 0; z.stuckTot = 0; z.side = 1; z.flash = 0; z.hitT = 0; z.groanT = rnd(1, 4); z.dieT = 0; z.climbT = 0; z.chk = 0; z.chkX = 0; z.chkZ = 0; z.limp = Math.random() < 0.3;
+    z.win = w; z.state = 'approach'; z.slot = rnd(-1.2, 1.2); z.phase = rnd(TAU); z.attackT = 0; z.cool = 0; z.stuck = 0; z.stuckTot = 0; z.side = 1; z.flash = 0; z.hitT = 0; z.groanT = rnd(1, 4); z.dieT = 0; z.climbT = 0; z.chk = 0; z.chkX = 0; z.chkZ = 0; z.limp = Math.random() < 0.3; z.lane = rnd(-0.55, 0.55);
     const d = rnd(4, 9); z.pos.set(w.out.x + w.n.x * d + w.t.x * rnd(-3, 3), 0, w.out.z + w.n.z * d + w.t.z * rnd(-3, 3)); z.yaw = Math.atan2(-w.n.x, -w.n.z); z.root.rotation.set(0, z.yaw, 0); z.root.visible = true; z.pelvis.rotation.set(0, 0, 0);
     z.root.position.y = 0; this.alive++; return z;
   }
@@ -99,36 +99,34 @@ export class Zombies {
         z.pos.x = sx + (ex - sx) * k; z.pos.z = sz + (ez - sz) * k; z.climbY = Math.sin(k * Math.PI) * 0.75; z.root.position.y = z.climbY; z.yaw = lerpAng(z.yaw, Math.atan2(-w.n.x, -w.n.z), Math.min(1, dt * 8)); sp = 1.5;
         if (k >= 1) { z.state = 'chase'; z.climbY = 0; z.root.position.y = 0; }
       } else { // chase
-        let tx = px, tz = pz; const zArea = areaOf(z.pos.x, z.pos.z, W.mapId);
-        if (zArea !== pArea) {
+        const bait = W.bait, bd = bait ? Math.hypot(bait.x - z.pos.x, bait.z - z.pos.z) : 99;
+        const lure = bait && bd < 16;
+        const destX = lure ? bait.x : px, destZ = lure ? bait.z : pz;
+        const destArea = lure ? areaOf(destX, destZ, W.mapId) : pArea;
+        const zArea = areaOf(z.pos.x, z.pos.z, W.mapId);
+        let tx = destX, tz = destZ, portal = null;
+        if (zArea !== destArea) {
           const doors = W.doors && W.doors.length ? W.doors : (door ? [door] : []);
-          const path = route(zArea, pArea, doors);
-          if (path && path.length) {
-            const g = path[0], next = g.areas[0] === zArea ? g.areas[1] : g.areas[0];
-            const through = Math.hypot(z.pos.x - g.x, z.pos.z - g.z) < 1.65;
-            const dest = standOf(g, through ? next : zArea); tx = dest.x; tz = dest.z;
-          }
+          portal = portalTarget(z.pos.x, z.pos.z, W.mapId, destArea, doors, z.lane || 0);
+          if (portal) { tx = portal.x; tz = portal.z; }
         }
         let dx = tx - z.pos.x, dz = tz - z.pos.z; const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
         const pd = Math.hypot(px - z.pos.x, pz - z.pos.z);
-        // stuck sidestep
-        if (z.stuck > 0) { z.stuck -= dt; const a = 1.2 * z.side, c = Math.cos(a), sn = Math.sin(a); const ndx = dx * c - dz * sn, ndz = dx * sn + dz * c; dx = ndx; dz = ndz; }
-        // separation
-        let sx = 0, sz = 0; for (let j = 0; j < this.list.length; j++) { if (j === i) continue; const o = this.list[j]; if (o.state !== 'chase' && o.state !== 'attack') continue; const ex = z.pos.x - o.pos.x, ez = z.pos.z - o.pos.z, dd = ex * ex + ez * ez; if (dd < 0.7 && dd > 1e-4) { const q = 1 / Math.sqrt(dd); sx += ex * q * (0.9 - Math.sqrt(dd)); sz += ez * q * (0.9 - Math.sqrt(dd)); } }
-        dx += sx * 1.2; dz += sz * 1.2;
+        if (z.stuck > 0 && !portal) { z.stuck -= dt; const a = 0.7 * z.side, c = Math.cos(a), sn = Math.sin(a); const ndx = dx * c - dz * sn, ndz = dx * sn + dz * c; dx = ndx; dz = ndz; }
+        let sx = 0, sz = 0; for (let j = 0; j < this.list.length; j++) { if (j === i) continue; const o = this.list[j]; if (o.state !== 'chase' && o.state !== 'attack') continue; const ex = z.pos.x - o.pos.x, ez = z.pos.z - o.pos.z, dd = ex * ex + ez * ez; if (dd < 0.62 && dd > 1e-4) { const q = 1 / Math.sqrt(dd); sx += ex * q * (0.78 - Math.sqrt(dd)); sz += ez * q * (0.78 - Math.sqrt(dd)); } }
+        if (portal) { if (portal.crossZ) sx *= 0.12; else sz *= 0.12; }
+        dx += sx * 1.15; dz += sz * 1.15;
         const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
-        if (pd < 1.0 && zArea === pArea) { sp = 0; } else { sp = z.speed; }
-        // attack
+        const goal = Math.hypot(destX - z.pos.x, destZ - z.pos.z);
+        const hold = !portal && (lure ? goal < 0.9 : pd < 1.0 && zArea === pArea);
+        sp = hold || z.speed <= 0 ? 0 : z.speed;
         z.cool -= dt;
-        if (pd < 1.35 && zArea === pArea) {
-          if (z.attackT <= 0 && z.cool <= 0) { z.attackT = 0.01; }
-        }
-        if (z.attackT > 0) { z.attackT += dt; if (z.attackT > 0.42) { if (pd < 1.7 && zArea === pArea) cb.hitPlayer?.(z); z.attackT = 0; z.cool = 1.05; } sp *= 0.3; }
-        z.pos.x += dx * sp * dt; z.pos.z += dz * sp * dt; mvx = dx; mvz = dz; W.resolve(z.pos, 0.36 * s);
-        z.yaw = lerpAng(z.yaw, Math.atan2(player.x - z.pos.x, player.z - z.pos.z) * (pd < 4 ? 1 : 0) + Math.atan2(dx, dz) * (pd < 4 ? 0 : 1), Math.min(1, dt * 9));
-        if (pd < 4) z.yaw = lerpAng(z.yaw, Math.atan2(px - z.pos.x, pz - z.pos.z), Math.min(1, dt * 9));
-        // stuck detection
-        z.chk += dt; if (z.chk > 0.5) { const mv = Math.hypot(z.pos.x - z.chkX, z.pos.z - z.chkZ); if (sp > 0.5 && mv < sp * 0.5 * 0.3) { z.stuck = 1.0; z.side = Math.random() < 0.5 ? -1 : 1; z.stuckTot += 0.5; } else z.stuckTot = Math.max(0, z.stuckTot - 0.25); z.chkX = z.pos.x; z.chkZ = z.pos.z; z.chk = 0; if (z.stuckTot > 6) { this.reroute(z); } }
+        if (!lure && pd < 1.35 && zArea === pArea && !portal) { if (z.attackT <= 0 && z.cool <= 0) z.attackT = 0.01; }
+        if (z.attackT > 0) { z.attackT += dt; if (z.attackT > 0.42) { if (!lure && pd < 1.7 && zArea === pArea) cb.hitPlayer?.(z); z.attackT = 0; z.cool = 1.05; } sp *= 0.3; }
+        z.pos.x += dx * sp * dt; z.pos.z += dz * sp * dt; mvx = dx; mvz = dz; if (sp > 0) W.resolve(z.pos, 0.36 * s);
+        const faceX = portal ? dx : destX - z.pos.x, faceZ = portal ? dz : destZ - z.pos.z;
+        z.yaw = lerpAng(z.yaw, Math.atan2(faceX, faceZ), Math.min(1, dt * 9));
+        z.chk += dt; if (z.chk > 0.45) { const mv = Math.hypot(z.pos.x - z.chkX, z.pos.z - z.chkZ); if (sp > 0.4 && mv < 0.1) { z.stuck = portal ? 0 : 0.45; z.side = Math.random() < 0.5 ? -1 : 1; z.stuckTot += 0.45; if (portal) { const gx = portal.gx - z.pos.x, gz = portal.gz - z.pos.z, gd = Math.hypot(gx, gz) || 1; z.pos.x += gx / gd * 0.28; z.pos.z += gz / gd * 0.28; W.resolve(z.pos, 0.36 * s); } } else z.stuckTot = Math.max(0, z.stuckTot - 0.3); z.chkX = z.pos.x; z.chkZ = z.pos.z; z.chk = 0; if (z.stuckTot > 1.8 && portal) { z.pos.x = portal.ex; z.pos.z = portal.ez; W.resolve(z.pos, 0.36 * s); z.stuckTot = 0; } else if (z.stuckTot > 6) this.reroute(z); }
       }
       // pose — shamble: arms oppose the legs, one arm strikes, hits snap the torso back
       z.root.rotation.y = z.yaw; if (z.state !== 'climb') z.root.position.y = 0;
