@@ -30,6 +30,20 @@ export const SFILES = (hi) => [
 let SKIT = null;
 export function soldierKitLoaded() { return !!SKIT; }
 
+// Teammate-only readability light: a cool moonlit rim (fresnel) plus a faint albedo fill, added as emissive in the
+// fragment shader. No lights, no extra pass; the program stays one per material (cache key is fixed).
+export const TEAM_LIGHT = { rim: { value: 0.45 }, fill: { value: 0.1 }, rimCol: { value: new THREE.Color(0.62, 0.72, 0.95) } };
+function teammateLight(mat, k) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uTmRim = TEAM_LIGHT.rim; sh.uniforms.uTmFill = TEAM_LIGHT.fill; sh.uniforms.uTmRimCol = TEAM_LIGHT.rimCol;
+    sh.fragmentShader = 'uniform float uTmRim;\nuniform float uTmFill;\nuniform vec3 uTmRimCol;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>',
+      `#include <emissivemap_fragment>
+      { float tmF = pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 3.0);
+        totalEmissiveRadiance += uTmRimCol * (tmF * uTmRim * ${k.toFixed(2)}) + diffuseColor.rgb * uTmFill; }`);
+  };
+  mat.customProgramCacheKey = () => 'tmlight' + k;
+}
+
 export async function loadSoldierKit(hi) {
   const tl = new THREE.TextureLoader();
   const tex = (u, srgb) => tl.loadAsync(SBASE + u).then((t) => {
@@ -47,13 +61,16 @@ export async function loadSoldierKit(hi) {
     tex(`soldier_nrm_${sz}.webp`, false),
     tex(`soldier_orm_${sz}.webp`, false)
   ]);
+  // glTF normal maps with flipY=false and no tangent attribute need y flipped (as GLTFLoader does for derivative tangents);
+  // without it the folds, straps and pouch edges were lit from the wrong side and the fabric read as mud.
   const bodyMat = new THREE.MeshStandardMaterial({
-    map: diff, normalMap: nrm, roughnessMap: orm, metalnessMap: orm,
-    roughness: 0.88, metalness: 0.05
+    map: diff, normalMap: nrm, normalScale: new THREE.Vector2(1, -1), roughnessMap: orm, metalnessMap: orm,
+    roughness: 0.92, metalness: 0.05
   });
-  bodyMat.color.setScalar(0.74); // fabric albedo sits with the night grade; full-white tint blew out under the flashlight
+  bodyMat.color.setScalar(0.82); // fabric albedo sits with the night grade; full-white tint blew out under the flashlight
   // albedo already has a gentle AO multiply; do not also hook aoMap
-  const rifleMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.45, metalness: 0.32 });
+  const rifleMat = new THREE.MeshStandardMaterial({ color: 0x1e1e1e, roughness: 0.5, metalness: 0.3 });
+  teammateLight(bodyMat, 1); teammateLight(rifleMat, 0.6);
   gltf.scene.updateMatrixWorld(true);
   gltf.scene.traverse((o) => {
     if (!o.isMesh) return;
@@ -85,7 +102,8 @@ function createFromKit(name, teamIdx) {
   const model = skClone(SKIT.scene);
   model.traverse((o) => {
     if (!o.isMesh) return;
-    o.material = o.material.clone();
+    const src = o.material; o.material = src.clone();
+    o.material.onBeforeCompile = src.onBeforeCompile; o.material.customProgramCacheKey = src.customProgramCacheKey; // clone() drops these
   });
   const map = bindMap(model);
   const mixer = new THREE.AnimationMixer(model);
@@ -107,6 +125,9 @@ function createFromKit(name, teamIdx) {
 
   const g = new THREE.Group();
   const body = new THREE.Group();
+  // The GLB faces +Z with the rifle on its left shoulder; the game's soldiers face -Z (yaw 0 = forward -Z).
+  // Mirroring Z turns it around and makes it a right-handed shooter in one step (three flips the winding itself).
+  model.scale.z = -1;
   body.add(model);
   g.add(body);
 
@@ -193,13 +214,13 @@ function poseKitSoldier(g, { dt, speed, fwd, strafe, pitch, down, dist, recoil, 
     else { acts.aim.setEffectiveWeight(0); if (acts.aim.isRunning() && acts.aim.weight === 0) acts.aim.stop(); }
   }
   U.mixer.update(dt || 0);
-  // Pitch and recoil are applied after the mixer so they are not overwritten.
-  if (U.map.chest) U.map.chest.rotateX(-(pitch || 0) * 0.65);
-  if (U.map.head) U.map.head.rotateX(-(pitch || 0) * 0.35);
+  // Pitch and recoil are applied after the mixer so they are not overwritten (signs flipped for the Z-mirrored model).
+  if (U.map.chest) U.map.chest.rotateX((pitch || 0) * 0.65);
+  if (U.map.head) U.map.head.rotateX((pitch || 0) * 0.35);
   if (U.recoilT > 0) {
     const kck = U.recoilT;
-    if (U.map.weapon) U.map.weapon.rotateX(-kck * 0.35);
-    if (U.map.chest) U.map.chest.rotateX(-kck * 0.08);
+    if (U.map.weapon) U.map.weapon.rotateX(kck * 0.35);
+    if (U.map.chest) U.map.chest.rotateX(kck * 0.08);
     U.recoilT = Math.max(0, U.recoilT - (dt || 0.016) * 6);
   }
   // Downed tilt is applied on userData.body by mp.js.

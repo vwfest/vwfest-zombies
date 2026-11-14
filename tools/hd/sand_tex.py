@@ -3,13 +3,13 @@
   pre : 8K source → 2K base, camo-fabric mask, large-scale shading (AO) map
   post: baked 2K albedo + source normal/roughness → 1024/512 WebP (diff, nrm, orm) + NVG/lens patches
 """
-import sys, json
+import os, sys, json
 from pathlib import Path
 from PIL import Image, ImageFilter
 import numpy as np
 Image.MAX_IMAGE_PIXELS = None
 SRC = Path('/workspace/zz-free-models/src/sand_soldier/textures')
-WORK = Path('/workspace/zz-soldier-shots/v2/work')
+WORK = Path(os.environ.get('SOLDIER_WORK', '/workspace/zz-soldier-shots/v3/work'))
 ASSETS = Path('/workspace/zz-soldier/assets/hd/soldier')
 
 def pre():
@@ -37,6 +37,16 @@ def patch(img, box, rgb):
 def post():
     P = json.loads((WORK / 'patches.json').read_text())
     diff = np.asarray(Image.open(WORK / 'baked_diff_2k.png').convert('RGB')).copy()
+    patch(diff, P['nvg'], (34, 35, 31)); patch(diff, P['lens'], (8, 9, 10))
+    # v3 readability grade: soften camo blotch contrast (it read as mud at night) and set the plate carrier,
+    # pouches and straps a step darker and a touch richer than the fatigues so the kit separates from the uniform.
+    m = np.asarray(Image.open(WORK / 'camo_mask.png').convert('L').resize((2048, 2048), Image.BILINEAR)).astype(np.float32)[..., None] / 255.0
+    f = diff.astype(np.float32)
+    lum = f.mean(axis=2, keepdims=True)
+    camo_mean = (f * m).sum(axis=(0, 1)) / max(1.0, m.sum())
+    camo = camo_mean + (f - camo_mean) * 0.78
+    gear = (lum + (f - lum) * 1.12) * 0.86
+    diff = np.clip(camo * m + gear * (1 - m), 0, 255).astype(np.uint8)
     patch(diff, P['nvg'], (34, 35, 31)); patch(diff, P['lens'], (8, 9, 10))
     nrm = Image.open(SRC / 'material_1_normal.png').convert('RGB').resize((2048, 2048), Image.BOX)
     nrm = np.asarray(nrm).copy()
