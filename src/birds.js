@@ -25,14 +25,16 @@ export { FIRST_ROUND };
 export class Birds {
   constructor(scene, world, tier) {
     this.scene = scene; this.world = world; this.tier = tier;
-    this.max = tier > 1 ? 24 : tier > 0 ? 20 : 16;
+    this.ABS_MAX = 24;
+    this.max = this._capFor(tier);
     this.list = [];
     this.alive = 0;
-    this.field = createBirdField(scene, tier, this.max);
+    this.field = createBirdField(scene, tier, this.ABS_MAX);
     this.center = { x: 0, z: 1.5 };
     this._dummy = 0;
-    for (let i = 0; i < this.max; i++) this.list.push(this._fresh(i));
+    for (let i = 0; i < this.ABS_MAX; i++) this.list.push(this._fresh(i));
   }
+  _capFor(t) { return t > 1 ? 24 : t > 0 ? 16 : 8; } // phone: hard cap 8 on-screen birds
 
   _fresh(i) {
     return {
@@ -51,9 +53,10 @@ export class Birds {
 
   setTier(t) {
     this.tier = t;
-    this.max = t > 1 ? 24 : t > 0 ? 20 : 16;
+    this.max = this._capFor(t);
     this.field.setTier(t);
   }
+  prewarm(renderer, camera, scene) { this.field.prewarm?.(renderer, camera, scene); }
 
   reset() {
     for (const b of this.list) { b.state = 'dead'; b.visible = false; }
@@ -249,15 +252,20 @@ export class Birds {
   _draw(time, player) {
     this.field.beginFrame(time);
     const px = player?.x ?? 0, py = player?.y ?? 1.6, pz = player?.z ?? 8;
-    let iDraw = 0;
+    const live = [];
     for (const b of this.list) {
       if (b.state === 'dead' || !b.visible) continue;
-      // InstancedMesh attributes are indexed by the bird's stable slot so aPhase stays put.
       const dist = Math.hypot(b.x - px, b.y - py, b.z - pz);
+      live.push({ b, dist });
+    }
+    // Phone: never draw more than this.max (8) closest birds, even if something spawned extra.
+    live.sort((a, b) => a.dist - b.dist);
+    const cap = this.max;
+    for (let i = 0; i < live.length && i < cap; i++) {
+      const { b, dist } = live[i];
       this.field.setBird(b.i, b.x, b.y, b.z, b.pitch, b.yaw, b.bank, b.scale, {
-        flap: b.flap, tuck: b.tuck, flare: b.flare, dead: b.dead, phase: b.phase,
+        flap: b.flap, tuck: b.tuck, flare: b.flare, dead: b.dead, phase: b.phase, bank: b.bank,
       }, dist, true);
-      iDraw++;
     }
     this.field.commit();
   }

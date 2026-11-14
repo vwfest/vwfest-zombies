@@ -545,7 +545,20 @@ $('mapSeg').addEventListener('click', (e) => { const b = e.target.closest('butto
 P.slots = [slotOf('pistol'), null]; showGun(); applyTier(tier); syncMute(); syncMusic(); renderScores($('scoreList'), loadScores()); refreshGlobal();
 zombies.max = MAP.cap[tier > 0 ? 1 : 0];
 for (let i = 0; i < 40; i++) tick(0.05);
-requestAnimationFrame(() => { post.render(0.016, 0, 0, 0); $('loading').classList.add('done'); setTimeout(() => $('loading').remove(), 800); setTimeout(() => { hdStarted = true; hd.load(tier); hdKit(tier); }, qs.has('test') ? 0 : 120); });
+function finishLoading() {
+  if (finishLoading.done) return; finishLoading.done = true;
+  try { birds.prewarm(renderer, cam, scene); } catch (e) { console.warn('[birds] prewarm', e); }
+  post.render(0.016, 0, 0, 0);
+  $('loading').classList.add('done'); setTimeout(() => $('loading').remove(), 800);
+  setTimeout(() => { hdStarted = true; hd.load(tier); hdKit(tier); }, qs.has('test') ? 0 : 120);
+}
+const birdReady = birds.field?.ready;
+if (birdReady && typeof birdReady.then === 'function') {
+  birdReady.then(() => { try { birds.prewarm(renderer, cam, scene); } catch (e) {} finishLoading(); });
+  setTimeout(finishLoading, 6000);
+} else {
+  requestAnimationFrame(finishLoading);
+}
 requestAnimationFrame(frame);
 // test / debug hooks (harmless in production)
 // PWA offline cache (skipped on file:// and in tests)

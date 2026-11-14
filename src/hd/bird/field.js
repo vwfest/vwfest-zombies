@@ -5,7 +5,8 @@ import * as THREE from 'three';
 import { clone as skClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { createBirdMaterials } from './textures.js';
 import { bakeBirdLOD, BIN_KEYS } from './mesh.js';
-import { loadBuzzardAssets, lodMeshes, clipMap } from './loader.js';
+import { loadBuzzardAssets } from './loader.js';
+import { mergeBuzzard } from './merge.js';
 
 const MAT_KEY = { flesh: 'flesh', bone: 'bone', feather: 'feather', viscera: 'viscera', eye: 'eye', ruff: 'ruff', beak: 'beak' };
 
@@ -56,6 +57,54 @@ function attachFlightShader(material, uniforms) {
       `);
   };
   material.customProgramCacheKey = () => 'buzzard-flight-v4';
+}
+
+
+function attachInstancedSkin(material, uniforms) {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uBoneTex = uniforms.uBoneTex;
+    shader.uniforms.uBoneTexW = uniforms.uBoneTexW;
+    shader.uniforms.uBoneTexH = uniforms.uBoneTexH;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>
+        attribute vec4 skinIndex; attribute vec4 skinWeight; attribute float aBoneRow;
+        uniform sampler2D uBoneTex; uniform float uBoneTexW; uniform float uBoneTexH;
+        mat4 getBoneMatrix(const in float row, const in float bone){
+          float y = (row + 0.5) / uBoneTexH;
+          float x0 = bone * 4.0;
+          vec4 c0 = texture2D(uBoneTex, vec2((x0 + 0.5) / uBoneTexW, y));
+          vec4 c1 = texture2D(uBoneTex, vec2((x0 + 1.5) / uBoneTexW, y));
+          vec4 c2 = texture2D(uBoneTex, vec2((x0 + 2.5) / uBoneTexW, y));
+          vec4 c3 = texture2D(uBoneTex, vec2((x0 + 3.5) / uBoneTexW, y));
+          return mat4(c0, c1, c2, c3);
+        }
+        mat4 buzzardSkin(){
+          // Compact instance slot == bone-texture row. gl_InstanceID is reliable
+          // on WebGL2; aBoneRow is kept as a fallback if InstanceID is unavailable.
+          float row = aBoneRow;
+          #ifdef USE_INSTANCING
+            row = float(gl_InstanceID);
+          #endif
+          return skinWeight.x * getBoneMatrix(row, skinIndex.x)
+               + skinWeight.y * getBoneMatrix(row, skinIndex.y)
+               + skinWeight.z * getBoneMatrix(row, skinIndex.z)
+               + skinWeight.w * getBoneMatrix(row, skinIndex.w);
+        }
+      `)
+      .replace('#include <skinnormal_vertex>', `
+        {
+          mat3 bs = mat3(buzzardSkin());
+          objectNormal = bs * objectNormal;
+          #ifdef USE_TANGENT
+            objectTangent = bs * objectTangent;
+          #endif
+        }
+      `)
+      .replace('#include <skinning_vertex>', `
+        transformed = (buzzardSkin() * vec4(transformed, 1.0)).xyz;
+      `);
+  };
+  material.customProgramCacheKey = () => 'buzzard-instanced-skin-v2';
 }
 
 function makeAttrs(max) {
@@ -155,12 +204,34 @@ function pickClip(acts, names) {
   return null;
 }
 
-function makeOne(sceneTpl, clips, shadows) {
+function blendActs(acts, anim) {
+  const dead = anim.dead || 0, flare = anim.flare || 0, tuck = anim.tuck || 0, flap = anim.flap || 0;
+  const bank = Math.min(1, Math.abs(anim.bank || 0) / 0.7);
+  const death = pickClip(acts, ['death']);
+  const strike = pickClip(acts, ['strike']);
+  const dive = pickClip(acts, ['dive_tuck', 'dive-tuck', 'diveTuck']);
+  const flapA = pickClip(acts, ['flap']);
+  const bankA = pickClip(acts, ['bank']);
+  const glide = pickClip(acts, ['glide']);
+  if (death) death.setEffectiveWeight(dead);
+  if (strike) strike.setEffectiveWeight(flare * (1 - dead));
+  if (dive) dive.setEffectiveWeight(tuck * (1 - flare) * (1 - dead));
+  if (flapA) flapA.setEffectiveWeight(flap * (1 - tuck) * (1 - flare) * (1 - dead));
+  if (bankA) bankA.setEffectiveWeight(bank * (1 - flap) * (1 - tuck) * (1 - flare) * (1 - dead));
+  const rest = Math.max(0, (1 - flap) * (1 - tuck) * (1 - flare) * (1 - dead) * (1 - bank * 0.6));
+  if (glide) glide.setEffectiveWeight(rest);
+}
+
+function makeRig(sceneTpl, clips) {
   const root = skClone(sceneTpl);
-  root.visible = false;
+  let skeleton = null;
+  const meshes = [];
   root.traverse((o) => {
-    if (o.isMesh) { o.frustumCulled = false; o.castShadow = shadows; o.receiveShadow = true; }
+    if (!skeleton && o.skeleton) skeleton = o.skeleton;
+    if (o.isMesh) meshes.push(o);
   });
+  for (const m of meshes) { m.parent && m.parent.remove(m); }
+  if (!skeleton) throw new Error('buzzard rig: no skeleton');
   const mixer = new THREE.AnimationMixer(root);
   const acts = {};
   for (const c of clips) {
@@ -172,84 +243,111 @@ function makeOne(sceneTpl, clips, shadows) {
   }
   const glide = pickClip(acts, ['glide']);
   if (glide) glide.setEffectiveWeight(1);
-  return { root, mixer, acts, used: false };
+  return { root, mixer, acts, skeleton };
 }
 
-function setLodVisible(root, want) {
-  // want: 'LOD0' | 'LOD1' | 'LOD2' | null (hide all)
-  root.traverse((o) => {
-    if (!o.isMesh) return;
-    if (!want) { o.visible = true; return; }
-    const n = o.name;
-    if (n.startsWith('LOD0') || n.startsWith('LOD1') || n.startsWith('LOD2')) {
-      o.visible = n.startsWith(want);
-    }
-  });
+function writeBoneRow(data, row, skeleton, texW) {
+  skeleton.update();
+  const bm = skeleton.boneMatrices;
+  const rowOff = row * texW * 4;
+  const n = skeleton.bones.length;
+  for (let b = 0; b < n; b++) {
+    const s = b * 16, d = rowOff + b * 16;
+    for (let k = 0; k < 16; k++) data[d + k] = bm[s + k];
+  }
 }
 
-function blendActs(acts, anim) {
-  const dead = anim.dead || 0, flare = anim.flare || 0, tuck = anim.tuck || 0, flap = anim.flap || 0;
-  const death = pickClip(acts, ['death']);
-  const strike = pickClip(acts, ['strike']);
-  const dive = pickClip(acts, ['dive_tuck', 'dive-tuck', 'diveTuck']);
-  const flapA = pickClip(acts, ['flap']);
-  const glide = pickClip(acts, ['glide']);
-  if (death) death.setEffectiveWeight(dead);
-  if (strike) strike.setEffectiveWeight(flare * (1 - dead));
-  if (dive) dive.setEffectiveWeight(tuck * (1 - flare) * (1 - dead));
-  if (flapA) flapA.setEffectiveWeight(flap * (1 - tuck) * (1 - flare) * (1 - dead));
-  if (glide) glide.setEffectiveWeight(Math.max(0, (1 - flap) * (1 - tuck) * (1 - flare) * (1 - dead)));
+function makeBoneTex(max, boneCount) {
+  const texW = boneCount * 4, texH = max;
+  const boneData = new Float32Array(texW * texH * 4);
+  const boneTex = new THREE.DataTexture(boneData, texW, texH, THREE.RGBAFormat, THREE.FloatType);
+  boneTex.magFilter = boneTex.minFilter = THREE.NearestFilter;
+  boneTex.wrapS = boneTex.wrapT = THREE.ClampToEdgeWrapping;
+  boneTex.generateMipmaps = false;
+  boneTex.colorSpace = THREE.NoColorSpace;
+  boneTex.internalFormat = 'RGBA32F';
+  boneTex.needsUpdate = true;
+  return {
+    boneData, boneTex, texW, texH,
+    uniforms: {
+      uBoneTex: { value: boneTex },
+      uBoneTexW: { value: texW },
+      uBoneTexH: { value: texH },
+    },
+  };
 }
 
 function makeSkinned(group, assets, tier, max) {
+  const loSrc = assets.lo || assets.hi;
+  const hiSrc = assets.hi || null;
+  const lo = mergeBuzzard(loSrc, { atlasSize: 512, simplifyEyes: true });
+  const hi = (hiSrc && tier > 0) ? mergeBuzzard(hiSrc, { atlasSize: 1024, simplifyEyes: false }) : null;
+  const loTpl = loSrc.scene;
+  const loClips = loSrc.animations || [];
+  const hiTpl = hiSrc ? hiSrc.scene : null;
+  const hiClips = (hiSrc && hiSrc.animations && hiSrc.animations.length) ? hiSrc.animations : loClips;
+
+  // Each LOD keeps its own inverse-bind matrices and clips — LO and HI
+  // rest poses differ (IBM scale ~0.43 vs ~0.91), so they cannot share a rig.
+  const loPack = makeBoneTex(max, lo.boneCount);
+  const hiPack = hi ? makeBoneTex(max, hi.boneCount) : null;
+
+  const matLo = lo.material.clone();
+  attachInstancedSkin(matLo, loPack.uniforms);
+  const matHi = hi ? hi.material.clone() : matLo;
+  if (hi) attachInstancedSkin(matHi, hiPack.uniforms);
+
+  function makeIM(merged, mat, shadows) {
+    const im = new THREE.InstancedMesh(merged.geometry, mat, max);
+    im.frustumCulled = false;
+    im.castShadow = shadows;
+    im.receiveShadow = false;
+    im.count = 0;
+    im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    const rows = new Float32Array(max);
+    const aRow = new THREE.InstancedBufferAttribute(rows, 1);
+    aRow.setUsage(THREE.DynamicDrawUsage);
+    im.geometry.setAttribute('aBoneRow', aRow);
+    group.add(im);
+    return { im, rows, aRow };
+  }
+
   const shadows = tier > 1;
-  const loTpl = (assets.lo || assets.hi).scene;
-  const loClips = (assets.lo || assets.hi).animations || [];
-  const hiTpl = assets.hi ? assets.hi.scene : null;
-  const hiClips = assets.hi ? assets.hi.animations : loClips;
-  // Phone / low (tier 0): never LOD0 — all birds are lo clones (shared geom).
-  const heroN = tier > 1 ? 6 : tier > 0 ? 4 : 0;
-  const far = [];
+  const poolLo = makeIM(lo, matLo, shadows);
+  const poolHi = hi ? makeIM(hi, matHi, shadows) : null;
+
+  const rigsLo = [];
+  const rigsHi = [];
   for (let i = 0; i < max; i++) {
-    const s = makeOne(loTpl, loClips, shadows);
-    group.add(s.root);
-    setLodVisible(s.root, 'LOD2');
-    far.push(s);
+    // Hidden armatures + mixers; never added to the scene, so no extra draws.
+    rigsLo.push(makeRig(loTpl, loClips));
+    if (hiTpl) rigsHi.push(makeRig(hiTpl, hiClips));
   }
-  const hero = [];
-  for (let i = 0; i < heroN; i++) {
-    const s = makeOne(hiTpl || loTpl, hiClips, shadows);
-    group.add(s.root);
-    setLodVisible(s.root, 'LOD1');
-    hero.push(s);
-  }
+
+  const dummy = new THREE.Object3D();
   const pending = [];
-  let lastT = 0, trisLo = 0, trisHi = 0;
-  function countTris(root, prefix) {
-    let t = 0;
-    root.traverse((o) => {
-      if (!o.isMesh || !o.geometry) return;
-      if (prefix && !String(o.name || '').startsWith(prefix)) return;
-      const g = o.geometry;
-      t += (g.index ? g.index.count : g.attributes.position.count) / 3;
-    });
-    return Math.round(t);
+  let lastT = 0;
+  const heroN = tier > 1 ? 6 : tier > 0 ? 4 : 0;
+  const hiDist = tier > 1 ? 11 : 8;
+
+  function poseAndWrite(rig, pack, row, anim, dt) {
+    blendActs(rig.acts, anim);
+    rig.mixer.update(dt);
+    rig.root.updateMatrixWorld(true);
+    writeBoneRow(pack.boneData, row, rig.skeleton, pack.texW);
   }
-  trisLo = countTris((assets.lo || assets.hi).scene, 'LOD2') || countTris((assets.lo || assets.hi).scene, '');
-  if (assets.hi) trisHi = countTris(assets.hi.scene, 'LOD0') || countTris(assets.hi.scene, '');
 
   return {
     kind: 'skinned',
     max,
-    get trisLo() { return Math.round(trisLo); },
-    get trisHi() { return Math.round(trisHi); },
+    mats: { atlas: matLo },
+    get trisLo() { return lo.tris; },
+    get trisHi() { return hi ? hi.tris : 0; },
     beginFrame(time) {
       const dt = lastT ? Math.min(0.05, Math.max(0, time - lastT)) : 0.016;
       lastT = time;
       this._dt = dt;
       pending.length = 0;
-      for (const s of far) { s.used = false; s.root.visible = false; }
-      for (const s of hero) { s.used = false; s.root.visible = false; }
     },
     setBird(i, x, y, z, pitch, yaw, bank, scale, anim, dist, preferHi) {
       pending.push({ i, x, y, z, pitch, yaw, bank, scale, anim, dist, preferHi });
@@ -257,29 +355,72 @@ function makeSkinned(group, assets, tier, max) {
     commit() {
       pending.sort((a, b) => a.dist - b.dist);
       const dt = this._dt || 0.016;
-      let h = 0;
+      let nLo = 0, nHi = 0;
       for (const b of pending) {
-        const close = heroN && b.preferHi && b.dist < (tier > 1 ? 11 : 8) && h < hero.length;
-        const s = close ? hero[h++] : far[b.i];
-        if (!s) continue;
-        s.used = true;
-        s.root.visible = true;
-        s.root.position.set(b.x, b.y, b.z);
-        s.root.rotation.set(b.pitch, b.yaw, b.bank, 'YXZ');
-        s.root.scale.setScalar(b.scale);
-        // hi GLB is budget-packed as LOD0 only; lo is LOD2. Phone never gets a hero slot.
-        if (close) setLodVisible(s.root, 'LOD0');
-        else setLodVisible(s.root, 'LOD2');
-        blendActs(s.acts, b.anim);
-        s.mixer.update(dt);
+        dummy.position.set(b.x, b.y, b.z);
+        dummy.rotation.set(b.pitch, b.yaw, b.bank, 'YXZ');
+        dummy.scale.setScalar(b.scale);
+        dummy.updateMatrix();
+
+        const useHi = !!(poolHi && heroN && b.preferHi && b.dist < hiDist && nHi < heroN);
+        if (useHi) {
+          // Bone texture row must match the compact instance index (gl_InstanceID).
+          poseAndWrite(rigsHi[b.i], hiPack, nHi, b.anim, dt);
+          poolHi.im.setMatrixAt(nHi, dummy.matrix);
+          poolHi.rows[nHi] = nHi;
+          nHi++;
+        } else {
+          const rig = rigsLo[b.i];
+          if (!rig) continue;
+          poseAndWrite(rig, loPack, nLo, b.anim, dt);
+          poolLo.im.setMatrixAt(nLo, dummy.matrix);
+          poolLo.rows[nLo] = nLo;
+          nLo++;
+        }
+      }
+      loPack.boneTex.needsUpdate = true;
+      if (hiPack) hiPack.boneTex.needsUpdate = true;
+      poolLo.im.count = nLo;
+      poolLo.im.instanceMatrix.needsUpdate = true;
+      poolLo.aRow.needsUpdate = true;
+      if (poolHi) {
+        poolHi.im.count = nHi;
+        poolHi.im.instanceMatrix.needsUpdate = true;
+        poolHi.aRow.needsUpdate = true;
       }
     },
     setTier(t) {
-      const shadowsOn = t > 1;
-      for (const s of far.concat(hero)) s.root.traverse((o) => { if (o.isMesh) o.castShadow = shadowsOn; });
+      const on = t > 1;
+      poolLo.im.castShadow = on;
+      if (poolHi) poolHi.im.castShadow = on;
+    },
+    prewarm(renderer, camera, worldScene) {
+      const ident = new THREE.Matrix4();
+      if (rigsLo[0]) {
+        rigsLo[0].root.updateMatrixWorld(true);
+        writeBoneRow(loPack.boneData, 0, rigsLo[0].skeleton, loPack.texW);
+        loPack.boneTex.needsUpdate = true;
+      }
+      poolLo.im.count = 1; poolLo.im.setMatrixAt(0, ident); poolLo.rows[0] = 0;
+      poolLo.im.instanceMatrix.needsUpdate = true; poolLo.aRow.needsUpdate = true;
+      if (poolHi && rigsHi[0]) {
+        rigsHi[0].root.updateMatrixWorld(true);
+        writeBoneRow(hiPack.boneData, 0, rigsHi[0].skeleton, hiPack.texW);
+        hiPack.boneTex.needsUpdate = true;
+        poolHi.im.count = 1; poolHi.im.setMatrixAt(0, ident); poolHi.rows[0] = 0;
+        poolHi.im.instanceMatrix.needsUpdate = true; poolHi.aRow.needsUpdate = true;
+      }
+      try { renderer.compile(group, camera, worldScene || group); } catch (e) { console.warn('[birds] prewarm', e); }
+      poolLo.im.count = 0;
+      if (poolHi) poolHi.im.count = 0;
     },
     dispose() {
-      for (const s of far.concat(hero)) group.remove(s.root);
+      group.remove(poolLo.im);
+      if (poolHi) group.remove(poolHi.im);
+      loPack.boneTex.dispose();
+      if (hiPack) hiPack.boneTex.dispose();
+      lo.geometry.dispose();
+      if (hi) hi.geometry.dispose();
     },
   };
 }
@@ -287,9 +428,16 @@ function makeSkinned(group, assets, tier, max) {
 export function createBirdField(scene, tier = 2, max = 24) {
   const group = new THREE.Group(); group.name = 'birdField';
   scene.add(group);
-  let impl = makeProcedural(scene, tier, max, group);
+  // Do not mount the procedural field first — that compiled a unique shader per
+  // material bin and blew the program budget even after the GLB swapped in.
+  let impl = {
+    kind: 'pending', max, trisLo: 0, trisHi: 0,
+    beginFrame() {}, setBird() {}, commit() {}, setTier() {}, dispose() {},
+  };
+  let resolveReady;
+  const ready = new Promise((r) => { resolveReady = r; });
   const api = {
-    group,
+    group, ready,
     get mats() { return impl.mats; },
     get lods() { return impl.lods; },
     get max() { return impl.max; },
@@ -300,6 +448,7 @@ export function createBirdField(scene, tier = 2, max = 24) {
     setBird(...a) { return impl.setBird(...a); },
     commit(...a) { return impl.commit(...a); },
     setTier(t) { return impl.setTier?.(t); },
+    prewarm(renderer, camera, worldScene) { return impl.prewarm?.(renderer, camera, worldScene); },
     dispose() { impl.dispose?.(); scene.remove(group); },
   };
   loadBuzzardAssets().then((assets) => {
@@ -307,8 +456,11 @@ export function createBirdField(scene, tier = 2, max = 24) {
     while (group.children.length) group.remove(group.children[0]);
     impl = makeSkinned(group, assets, tier, max);
     console.info('[birds] glb field', impl.kind, 'lo', impl.trisLo, 'hi', impl.trisHi);
+    resolveReady(api);
   }).catch((e) => {
     console.warn('[birds] staying procedural:', e && e.message ? e.message : e);
+    impl = makeProcedural(scene, tier, max, group);
+    resolveReady(api);
   });
   return api;
 }

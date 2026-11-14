@@ -5,3 +5,5 @@ server/node_modules/
 # Android/TWA project lives on app-multiplayer, not this branch.
 android/
 .gradle/
+# Decoder files for a CSP-forbidden WASM path — do not ship.
+assets/hd/draco/
