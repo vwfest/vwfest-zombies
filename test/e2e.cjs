@@ -157,7 +157,7 @@ async function run(b, name, mobile, quality) {
   await ctx.close();
 }
 (async () => {
-  const b = await chromium.launch({ args });
+  const b = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args });
   await run(b, 'desktop', false, 'high'); await run(b, 'mobile', true, 'low');
   // auto-downgrade: unthrottled real-time frames on a slow software GPU must step the tier down
   console.log('\n== auto-downgrade ==');

@@ -12,6 +12,7 @@ import { upgradeZombies } from './hd/zombies.js';
 import { loadPacks } from './hd/pack.js';
 import { addGore } from './hd/gore.js';
 import { loadZombieKit, rigZombies } from './hd/zrig.js';
+import { loadSoldierKit, createSoldier, poseSoldier } from './hd/soldier.js';
 import { createHD } from './hd/look.js';
 import { createMP } from './mp.js';
 let MP = null; // co-op client, created after the scene is ready
@@ -23,8 +24,9 @@ const qs0 = new URLSearchParams(location.search), touch0 = qs0.has('touch') || (
 const q0 = qs0.get('quality') || (() => { try { return localStorage.getItem('vwz_q') || 'auto'; } catch (e) { return 'auto'; } })();
 const hiZ0 = q0 === 'high' || q0 === 'medium' || (q0 === 'auto' && !touch0);
 const zKitP = qs0.has('oldz') ? Promise.resolve(null) : loadZombieKit(hiZ0).catch((e) => { console.warn('zombie kit failed, using baked pack', e); return null; });
+const sKitP = loadSoldierKit(hiZ0).catch((e) => { console.warn('soldier kit failed, using procedural', e); return null; });
 await loadPacks(['cars']);
-const zKit = await zKitP; if (!zKit) await loadPacks(['zombies']);
+const [zKit] = await Promise.all([zKitP, sKitP]); if (!zKit) await loadPacks(['zombies']);
 import { FX, Motes, Post } from './fx.js';
 import { Sound } from './audio.js';
 import { WEAPONS, CRATE_POOL, buildViewmodel } from './weapons.js';
@@ -545,6 +547,14 @@ MP = createMP({ scene, zombies, P, G, cam, world, held: () => (P.slots[P.cur] &&
     for (const [id, type, x, z] of list) if (!G.ups.some((u) => u.sid === id)) { spawnPower(type, x, z); G.ups[G.ups.length - 1].sid = id; } },
   onOver: () => { setTimeout(() => { P.dead = true; gameOver(); MP.stop(); $('mpTag').classList.add('hidden'); }, 1500); },
   onQuit: () => toMenu() });
+try {
+  const _warm = createSoldier('_warm', 0);
+  _warm.visible = false;
+  scene.add(_warm);
+  poseSoldier(_warm, { dt: 0.016, t: 0, speed: 2.4, fwd: 2.4 });
+  requestAnimationFrame(() => { try { scene.remove(_warm); } catch (e) {} });
+} catch (e) { console.warn('soldier prewarm', e); }
+
 async function bootVoice() {
   if (!MP?.on) return;
   if (!voice) {
