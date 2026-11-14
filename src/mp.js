@@ -72,5 +72,5 @@ export function createMP(ctx) {
   function spectate(cam) { const alive = [...S.remotes.values()].filter((g) => g.position.y < 0.1 && g.visible); if (!alive.length) return null; const i = Math.floor(performance.now() / 6000) % alive.length, g = alive[i];
     const yaw = g.rotation.y, bx = g.position.x + Math.sin(yaw) * 3.4, bz = g.position.z + Math.cos(yaw) * 3.4; _v.set(bx, 2.6, bz); cam.position.lerp(_v, 0.2); cam.lookAt(g.position.x, 1.4, g.position.z); return g.userData.name; }
   function setTalking(id, on) { const g = S.remotes.get(id); if (g && g.userData.talk) g.userData.talk.visible = !!on; }
-  return { S, spectate, connect, stop, update, send, setTalking, get on() { return S.on; } };
+  return { S, spectate, connect, stop, update, send, setTalking, frameAt, get on() { return S.on; } };
 }

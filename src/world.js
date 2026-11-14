@@ -13,8 +13,16 @@ function labelTex(lines, color = '#18d1a0', w = 512, h = 256) {
   const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d');
   g.fillStyle = 'rgba(8,12,16,0.82)'; g.fillRect(0, 0, w, h); g.strokeStyle = color; g.lineWidth = 6; g.strokeRect(8, 8, w - 16, h - 16);
   g.textAlign = 'center'; g.textBaseline = 'middle';
-  lines.forEach((l, i) => { g.font = `${l.w || 700} ${l.s}px system-ui, "Segoe UI", Arial, sans-serif`; g.fillStyle = l.c || '#fff'; g.fillText(l.t, w / 2, l.y); });
+  lines.forEach((l, i) => { g.font = `${l.w || 700} ${l.s}px system-ui, "Segoe UI", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"`; g.fillStyle = l.c || '#fff'; g.fillText(l.t, w / 2, l.y); });
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+}
+
+// Does this device draw 💣 as a real colour emoji in a canvas? (a missing glyph draws a mono box or nothing)
+function emojiOK() {
+  try { const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d'); g.textBaseline = 'middle'; g.textAlign = 'center';
+    g.font = '28px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",system-ui,sans-serif'; g.fillStyle = '#ffffff'; g.fillText('\u{1F4A3}', 16, 16);
+    const d = g.getImageData(0, 0, 32, 32).data; let col = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 60 && Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]) > 40) col++;
+    return col > 12; } catch (e) { return false; }
 }
 
 export class World {
@@ -264,11 +272,16 @@ export class World {
     const g = new THREE.Group(); g.position.set(x, 1.7, z); g.rotation.y = rotY;
     const can = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), new THREE.MeshStandardMaterial({ color: 0x8a1018, roughness: 0.4 })); can.position.set(0, 0.35, 0.2);
     const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.1, 6), new THREE.MeshStandardMaterial({ color: 0xff2a3a, emissive: 0x4a0008 })); cap.position.set(0, 0.58, 0.2);
-    const lab = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.2), new THREE.MeshBasicMaterial({ map: labelTex([{ t: 'BLOOD BAIT', s: 48, y: 88, w: 800, c: '#ff5a6e' }, { t: '$250  ·  G TO THROW', s: 32, y: 168, c: '#ffd36b' }], '#ff5a6e'), toneMapped: false })); lab.position.set(0, -0.35, 0.04);
+    const lab = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.2), new THREE.MeshBasicMaterial({ map: labelTex([{ t: 'BLOOD BAIT', s: 48, y: 88, w: 800, c: '#ff5a6e' }, { t: '$250  ·  ' + (document.body.classList.contains('touch') ? (emojiOK() ? '\u{1F4A3} TO THROW' : 'TAP BAIT TO THROW') : 'G TO THROW'), s: 32, y: 168, c: '#ffd36b' }], '#ff5a6e'), toneMapped: false })); lab.position.set(0, -0.35, 0.04);
     const back = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.2, 0.08), this.M.fenceDark); back.position.set(0, 0.05, 0);
-    g.add(back, lab, can, cap); this.root.add(g);
+    // Free-standing board: mirror the label + can onto the back face so it reads (not mirrored) from both sides.
+    const lab2 = new THREE.Mesh(lab.geometry, lab.material); lab2.position.set(0, -0.35, -0.04); lab2.rotation.y = Math.PI;
+    const can2 = can.clone(); can2.position.z = -0.2; const cap2 = cap.clone(); cap2.position.z = -0.2;
+    g.add(back, lab, can, cap, lab2, can2, cap2); this.root.add(g);
     const nx = Math.sin(rotY), nz = Math.cos(rotY);
-    this.buys.push({ id: 'nade', price: 250, pos: { x: x + nx * 0.9, z: z + nz * 0.9 }, name: 'Blood Bait' });
+    // pos = front buy point (matches server/maps.json). back = same distance behind; client only offers the back
+    // spot within reach of the server's 2.2 m check on the front point (see findFocus).
+    this.buys.push({ id: 'nade', price: 250, pos: { x: x + nx * 0.9, z: z + nz * 0.9 }, back: { x: x - nx * 0.25, z: z - nz * 0.25 }, name: 'Blood Bait' });
   }
   wallBuy(id, x, z, rotY) {
     if (id === 'nade') { this.nadeBuy(x, z, rotY); return; }

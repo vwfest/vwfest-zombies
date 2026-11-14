@@ -65,7 +65,7 @@ const fx = new FX(scene, textures, tier);
 const motes = new Motes(textures, 260, { R: 20, y0: 0.3, y1: 6, size: 0.07, alpha: 0.22 }); scene.add(motes.points);
 const mist = new Motes(textures, 46, { R: 55, y0: 0.4, y1: 2.2, size: 5.5, alpha: 0.045, col: [0.55, 0.5, 0.62], additive: false, speed: 0.7 }); scene.add(mist.points);
 const zombies = new Zombies(scene, world, tier);
-const grenades = createGrenades({ scene, world, fx, zombies, sfx, get P() { return P; }, onKill: (z) => { if (!MP?.on) missions?.onKill(z); }, onSelf: (d) => { if (P.dead) return; P.hp -= d; P.lastHit = G.time; if (P.hp <= 0) die(); } });
+const grenades = createGrenades({ scene, world, fx, zombies, sfx, blood: (x, z, s) => hd.blood(x, z, s), get P() { return P; }, onKill: (z) => { if (!MP?.on) missions?.onKill(z); }, onSelf: (d) => { if (P.dead) return; P.hp -= d; P.lastHit = G.time; if (P.hp <= 0) die(); } });
 if (zKit) { rigZombies(zombies, zKit); window.__hd = { kit: zKit.hi ? 'hi' : 'lo' }; } else { window.__hd = upgradeZombies(zombies); addGore(zombies); } zombies.cam = cam;
 let mm; const minimap = (dt) => (mm || (mm = makeMinimap(world, zombies, P)))(dt);
 const viewScene = new THREE.Scene(); const post = new Post(renderer, scene, cam, viewScene);
@@ -267,7 +267,7 @@ function trySpawn(dt) {
 function findFocus() {
   let best = null; const test = (o, d, lim) => { if (d < lim && (!best || d < best.d)) best = { ...o, d }; };
   for (const w of world.windows) { if (w.count < 6) test({ type: 'win', w }, Math.hypot(P.x - w.in.x, P.z - w.in.z), 2.1); }
-  for (const b of world.buys) test({ type: 'buy', b }, Math.hypot(P.x - b.pos.x, P.z - b.pos.z), 1.9);
+  for (const b of world.buys) { test({ type: 'buy', b }, Math.hypot(P.x - b.pos.x, P.z - b.pos.z), 1.9); if (b.back && Math.hypot(P.x - b.pos.x, P.z - b.pos.z) < 2.15) test({ type: 'buy', b }, Math.hypot(P.x - b.back.x, P.z - b.back.z), 1.9); }
   for (const d of world.doors) if (!d.open) { const spots = d.stand ? Object.values(d.stand) : [d.pos]; for (const s of spots) test({ type: 'door', door: d }, Math.hypot(P.x - s.x, P.z - s.z), 2.4); }
   const job = missions && missions.focus(P.x, P.z); if (job) test(job, job.d, job.d + 0.01);
   const c = world.crate; if (c.state === 'idle' || c.state === 'ready') test({ type: 'crate' }, Math.hypot(P.x - c.x, P.z - c.z), 2.2);
@@ -414,7 +414,7 @@ function tick(dt) {
   else if (G.phase === 'round') { trySpawn(dt); if (G.toSpawn <= 0 && zombies.alive <= 0) { const cleared = G.round; G.phase = 'inter'; G.interT = MODE.inter; sfx.setMusicPhase('calm'); if (!MP?.on && missions) missions.onWave(cleared); } }
   else if (G.phase === 'inter') { G.interT -= dt; if (G.interT <= 0) startRound(G.round + 1); }
   if (G.state === 'playing') { const mood = G.phase === 'round' ? 'hot' : 'calm'; if (sfx.musicMood !== mood) sfx.setMusicPhase(mood); sfx.pumpMusic(); }
-  if (!MP?.on) { grenades.step(dt); zombies.update(dt, t, P, world.door, cbs); missions.update(dt); } else if (MP.S && MP.S.snaps && MP.S.snaps.length) { const last = MP.S.snaps[MP.S.snaps.length - 1]; grenades.sync(last.ng); const me = last.p && last.p.find((p) => p[0] === MP.S.id); if (me && me.length > 15 && G.nadeCd <= 0) P.nades = me[15]; }
+  if (!MP?.on) { grenades.step(dt); zombies.update(dt, t, P, world.door, cbs); missions.update(dt); } else if (MP.S && MP.S.snaps && MP.S.snaps.length) { const last = MP.S.snaps[MP.S.snaps.length - 1]; grenades.sync(last.ng); grenades.interp(MP.frameAt?.(performance.now())); const me = last.p && last.p.find((p) => p[0] === MP.S.id); if (me && me.length > 15 && G.nadeCd <= 0) P.nades = me[15]; }
   grenades.frame(); if (G.nadeCd > 0) G.nadeCd -= dt;
   world.update(dt, t, P); minimap(dt); if (missions) missions.frame(cam); if (voice && voice.joined) voice.tick();
   motes.center = { x: P.x, z: P.z }; mist.center = motes.center; motes.ps.update(dt); mist.ps.update(dt); fx.update(dt); updateCrate(dt);
@@ -532,7 +532,7 @@ MP = createMP({ scene, zombies, P, G, cam, world, held: () => (P.slots[P.cur] &&
       if (e.type === 'nuke') { sfx.boom(); P.shake = 1; $('fx-flash').style.transition = 'none'; $('fx-flash').style.opacity = 0.85; requestAnimationFrame(() => { $('fx-flash').style.transition = 'opacity 1.2s'; $('fx-flash').style.opacity = 0; }); } }
     else if (e.e === 'plank' && e.by === MP.S.id) { G.mpRepairs = (G.mpRepairs || 0) + 1; sfx.repair(); popText('+10'); }
     else if (e.e === 'mission') missions.onNetEvent(e);
-    else if (e.e === 'boom') grenades.splatter(e.x, e.z);
+    else if (e.e === 'boom') { grenades.splatter(e.x, e.z); sfx.boom(); }
     else if (e.e === 'crate' && e.s === 'shut') toast('The toolbox slammed shut'); },
   onAct: (m) => { if (!m.ok) { if (m.a === 'nade') P.nades++; if (m.why === 'pts') { sfx.deny(); toast('Not enough points'); } else if (m.why === 'full') toast('Bait pouch is full'); else if (m.why === 'not-yours') toast('That weapon belongs to a teammate'); return; }
     if (m.a === 'buy') { sfx.cash(); if (m.w === 'nade') P.nades = m.nades; else giveWeapon(m.w); } else if (m.a === 'door') sfx.cash(); else if (m.a === 'crate') { sfx.cash(); if (m.s === 'roll') { sfx.open(); sfx.jingle(4); } else if (m.s === 'take') { giveWeapon(m.w); banner(WEAPONS[m.w].name.toUpperCase()); } } },
