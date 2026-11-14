@@ -42,6 +42,7 @@ const MEDKIT_LIFETIME = 40;
 const $ = (id) => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const isTouch = qs.has('touch') || (matchMedia('(pointer:coarse)').matches && 'ontouchstart' in window) || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+const wantBirds = qs.has('birds'); // preview: denser menu flock + start on a flock round
 document.body.classList.toggle('touch', isTouch);
 const sfx = new Sound();
 try { sfx.muted = localStorage.getItem('vwz_mute') === '1'; } catch (e) {}
@@ -274,11 +275,18 @@ function updateCrate(dt) {
 function roundCount(r) { return Math.max(3, Math.round((6 + r * 2.3 + r * r * 0.12) * MODE.count)); }
 function startRound(n) {
   G.round = n; G.toSpawn = roundCount(n); G.brutes = n >= 5 ? (n % 5 === 0 ? Math.min(4, 1 + ((n / 5) | 0)) : n >= 7 ? 1 : 0) : 0; G.brutes = Math.round(G.brutes * MODE.brute); G.phase = 'round'; G.spawnT = 1.5; G.drops = 0;
-  G.toBird = 0; G.birdT = 1.8;
+  G.toBird = 0; G.birdT = wantBirds ? 0.15 : 1.8;
   if (!MP?.on && n >= BIRD_ROUND) {
     const flock = isFlockRound(n);
     G.toBird = Math.min(birds.max, birdCount(n, MODE.count, flock));
     if (flock) G.toSpawn = Math.max(4, G.toSpawn - Math.round(G.toBird * 0.5));
+    if (wantBirds) {
+      while (G.toBird > 0 && birds.alive < birds.max) {
+        if (!birds.spawn(n)) break;
+        G.toBird--;
+      }
+      G.birdT = 0.4;
+    }
   }
   if ((P.nades || 0) < 1) P.nades = 1;
   const line = sfx.lineFor('wave', '', n); sfx.round(n); sfx.setMusicPhase('hot'); banner('ROUND ' + n, line); if (!MP?.on) sfx.announce(line); const e = $('roundNum'); e.classList.remove('pulse'); void e.offsetWidth; e.classList.add('pulse');
@@ -407,6 +415,7 @@ function newGame() {
 }
 function startGame() {
   sfx.init(); sfx.musicStart(); sfx.setMusicDetail(tier === 0 || isTouch); newGame(); lb.start(); G.state = 'playing'; showGun(); ['menu', 'over', 'pause'].forEach((i) => $(i).classList.add('hidden')); $('hud').classList.remove('hidden'); $('touch').classList.toggle('hidden', !isTouch);
+  if (wantBirds) G.interT = 0.5;
   beam.visible = tier > 0 && P.flashlight; adaptGrace = 3; fpsAcc = 0; fpsN = 0;
   if (!isTouch && !qs.has('test') && G.mpPhase !== 'lobby') { try { const r = canvas.requestPointerLock?.(); r?.catch?.(() => {}); } catch (e) {} } else if (isTouch && G.mpPhase !== 'lobby') goFull();
   toast(isTouch ? 'Hold E at windows to repair · Open the gate for new guns' : 'Hold E at windows to repair · Open the gate for new guns');
@@ -436,7 +445,7 @@ function tick(dt) {
   if (G.state === 'menu') {
     G.orbit += dt * 0.12; const a = G.orbit, R = 9.5; cam.position.set(Math.sin(a) * R, 2.6 + Math.sin(a * 0.7) * 0.4, 6 + Math.cos(a) * R * 0.8); cam.lookAt(0, 1.8, 3); cam.rotation.z = 0;
     G.menuSpawn -= dt; if (G.menuSpawn <= 0 && zombies.alive < 5) { G.menuSpawn = 2.2; const z = zombies.spawn(pick(world.windows.filter((w) => w.area === 'A')), 2); if (z) { z.state = 'chase'; z.pos.set(rnd(-14, 14), 0, rnd(-18, -4)); z.speed = rnd(0.9, 1.5); z.dmg = 0; } }
-    if (birds.alive < 6) { const b = birds.spawn(8); if (b) { b.dmg = 0; b.cool = 999; b.height = 7 + rnd(0, 2); } }
+    if (birds.alive < (wantBirds ? birds.max : 6)) { const b = birds.spawn(8); if (b) { b.dmg = 0; b.cool = 999; b.height = 7 + rnd(0, 2); } }
     menuPlayer.x = 0; menuPlayer.z = 6; menuPlayer.hunt = false; zombies.update(dt, t, menuPlayer, world.door, cbsMenu); birds.update(dt, t, { x: 0, y: 1.6, z: 6, hunt: false }, birdCbs); world.update(dt, t, { x: cam.position.x, z: cam.position.z }); fx.update(dt); if (missions) missions.frame(cam); motes.center = { x: 0, z: 6 }; mist.center = motes.center; motes.ps.update(dt); mist.ps.update(dt); gunRoot.visible = false; beam.visible = false; return;
   }
   gunRoot.visible = true; beam.visible = tier > 0 && P.flashlight && !P.dead;
@@ -452,7 +461,7 @@ function tick(dt) {
   if (P.hp < P.maxHp * LOW_HP_FRAC && t - G.healBeat > 0.85) { G.healBeat = t; sfx.heart(); }
   // rounds
   if (MP?.on) MP.update(dt, t, cbs);
-  else if (G.phase === 'wait') { G.interT -= dt; if (G.interT <= 0) startRound(1); }
+  else if (G.phase === 'wait') { G.interT -= dt; if (G.interT <= 0) startRound(wantBirds ? 6 : 1); }
   else if (G.phase === 'round') { trySpawn(dt); trySpawnBirds(dt); if (G.toSpawn <= 0 && (G.toBird || 0) <= 0 && zombies.alive <= 0 && birds.alive <= 0) { const cleared = G.round; G.phase = 'inter'; G.interT = MODE.inter; sfx.setMusicPhase('calm'); if (!MP?.on && missions) missions.onWave(cleared); } }
   else if (G.phase === 'inter') { G.interT -= dt; if (G.interT <= 0) startRound(G.round + 1); }
   if (G.state === 'playing') { const mood = G.phase === 'round' ? 'hot' : 'calm'; if (sfx.musicMood !== mood) sfx.setMusicPhase(mood); sfx.pumpMusic(); }
