@@ -122,12 +122,13 @@ kbd{background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.2);borde
 .stats b{display:block;font-size:30px;font-weight:900}.stats span{font-size:10px;letter-spacing:.26em;color:#9fb0ba}
 #oScores{display:inline-block;text-align:left;font-size:14px;padding-left:20px;margin:6px 0}
 .foot{margin-top:14px;font-size:11px;letter-spacing:.2em;color:#6d7e88}
+.credits{margin-top:6px;font-size:11px;color:#6d7e88;max-width:620px;text-align:left}.credits summary{cursor:pointer;letter-spacing:.2em;text-transform:uppercase}.credits p{margin:6px 0 0;line-height:1.45;color:#8f9ea6}.credits a{color:#b7c6ce}
 #loading{position:fixed;inset:0;background:var(--bg);z-index:50;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;letter-spacing:.3em;font-size:12px;color:#9fb0ba;transition:opacity .6s}
 #loading.done{opacity:0;pointer-events:none}.spin{width:44px;height:44px;border:3px solid rgba(255,255,255,.12);border-top-color:var(--acc);border-radius:50%;animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
 @media(max-width:760px){.cols{grid-template-columns:1fr 1fr}.panel{padding:20px 16px}.primary{padding:14px 44px}}
 @media(max-height:520px){.panel{padding:12px 18px}h1{font-size:44px;margin:4px 0}.tag{display:none}.cols{display:none}.eyebrow{font-size:10px}.row{margin-top:8px}}
 @media(max-width:480px){.cols,#menu .cols{grid-template-columns:1fr}.how:not(#howTouch):not(.scores){display:none}#roundNum{font-size:40px}}
-@media(min-width:1000px) and (min-height:600px){#menu{align-items:flex-start;padding-left:5vw;background:linear-gradient(90deg,rgba(5,8,12,.78),rgba(5,8,12,.15) 70%)}#menu .panel{max-width:620px;text-align:left}#menu .tag{margin-left:0}#menu .row{justify-content:flex-start}#menu .cols{grid-template-columns:1fr 1fr}#menu .foot{align-self:flex-start}}
+@media(min-width:1000px) and (min-height:600px){#menu{align-items:flex-start;padding-left:5vw;background:linear-gradient(90deg,rgba(5,8,12,.78),rgba(5,8,12,.15) 70%)}#menu .panel{max-width:620px;text-align:left}#menu .tag{margin-left:0}#menu .row{justify-content:flex-start}#menu .cols{grid-template-columns:1fr 1fr}#menu .foot,#menu .credits{align-self:flex-start}}
 /* Menu: 2-col mid widths so GLOBAL SURVIVORS isn't a leftover skinny column (phone stays 1-col below) */
 #menu .cols{grid-template-columns:1fr 1fr}
 #menu .globalBox{margin-top:0}

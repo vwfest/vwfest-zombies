@@ -1,4 +1,6 @@
-// Procedural co-op teammate. 100% original geo/textures. Faces -Z at yaw 0 (same as player look).
+// Co-op teammate. GLB kit = "Sand soldier (outdated)" by buh (@buh-late), CC BY 4.0, modified + NVG from Military
+// Character Kit 1.1 (CC0) by britdawgmasterfunk; see CREDITS.md. The procedural soldier below is the fallback.
+// Faces -Z at yaw 0 (same as player look).
 // Shared kit, skinned fatigues, rigid rounded gear, LOD, planted locomotion. No extra lights.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -54,10 +56,8 @@ export async function loadSoldierKit(hi) {
   gltf.scene.updateMatrixWorld(true);
   gltf.scene.traverse((o) => {
     if (!o.isMesh) return;
-    const geo = o.geometry;
-    if (geo && !geo.attributes.tangent && geo.attributes.uv && geo.index) {
-      try { geo.computeTangents(); } catch (e) { /* bind-pose tangents optional */ }
-    }
+    // No computeTangents(): decimated meshes have zero-area UV triangles that give NaN tangents, and one NaN pixel
+    // blacks out the whole frame through bloom. three.js builds the tangent frame from screen derivatives instead.
     const isRifle = /rifle/i.test(o.name);
     o.material = isRifle ? rifleMat : bodyMat;
     o.castShadow = true;

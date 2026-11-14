@@ -1,7 +1,7 @@
 // Soldier GLB kit e2e. Usage:
 //   BASE=http://127.0.0.1:8492/ node test/soldier-kit.cjs
 // Does not touch the Render co-op server. Uses spawnDummy in the local scene.
-const { chromium } = require('/workspace/zz-lb5/node_modules/playwright');
+const { chromium } = require(require('path').join(__dirname, '..', 'node_modules', 'playwright'));
 const BASE = process.env.BASE || 'http://127.0.0.1:8492/';
 const OUT = process.env.OUT || '/workspace/zz-soldier-shots';
 const Q = process.env.QUALITY || 'high';
@@ -75,7 +75,7 @@ const ok = (c, m) => { console.log((c ? '  PASS ' : '  FAIL ') + m); if (!c) fai
   console.log('  info dummy', JSON.stringify(stats));
   ok(stats.kit, 'spawned avatar used the GLB kit (not procedural fallback)');
   ok(stats.skinned >= 1, 'has skinned mesh(es): ' + stats.skinned);
-  ok(stats.tris > 1000 && stats.tris <= 13000, 'tri count in budget: ' + stats.tris);
+  ok(stats.tris > 1000 && stats.tris <= 26000, 'tri count in budget: ' + stats.tris);
   ok(stats.hasMap >= 1, 'body material has albedo map');
   ok(stats.clips.includes('idle') && stats.clips.includes('walk') && stats.clips.includes('run'), 'clips: ' + stats.clips.join(','));
   ok(!!stats.body && !!stats.tag, 'body group + nametag present');

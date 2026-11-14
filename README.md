@@ -37,4 +37,4 @@ npm run build          # bundles src/ + three.js -> game.js
 npm run serve &        # http://localhost:8099
 npm test               # headless Playwright end-to-end test + screenshots
 ```
-All models are low-poly and generated procedurally; all sounds are synthesised with Web Audio. No third-party game assets.
+Most models are generated procedurally and all sounds are synthesised with Web Audio. The HD graphics and the co-op soldier use free CC0 / CC BY art that we modified; see [CREDITS.md](CREDITS.md) for the authors and licenses.
