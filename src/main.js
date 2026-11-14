@@ -43,6 +43,16 @@ const MEDKIT_LIFETIME = 40;
 const $ = (id) => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const isTouch = qs.has('touch') || (matchMedia('(pointer:coarse)').matches && 'ontouchstart' in window) || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+// preview-only: ?mates=1|2 spawns local dummy teammates in solo play. Never talks to the co-op server.
+const wantMates = (() => {
+  if (!qs.has('mates')) return 0;
+  const raw = qs.get('mates');
+  if (raw === '' || raw == null) return 2;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n)) return 2;
+  return Math.max(0, Math.min(2, n));
+})();
+const MATE_NAMES = ['Alpha', 'Bravo'];
 document.body.classList.toggle('touch', isTouch);
 const sfx = new Sound();
 try { sfx.muted = localStorage.getItem('vwz_mute') === '1'; } catch (e) {}
@@ -362,6 +372,54 @@ $('fPost').onsubmit = (e) => {
 };
 function renderScores(el, list) { el.innerHTML = list.length ? list.map((s, i) => `<li>Round <b>${s.round}</b> · ${s.kills} kills · ${s.pts.toLocaleString()} pts</li>`).join('') : '<li class="muted">No runs yet — be the first.</li>'; }
 
+/* ---------------- preview teammates (solo, ?mates=) ---------------- */
+function lerpAng(a, b, k) { let d = ((b - a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI; return a + d * k; }
+function clearPreviewMates() { MP?.clearDummies?.(); }
+function spawnPreviewMates() {
+  if (!wantMates || MP?.on) { clearPreviewMates(); if (!MP?.on) $('mpTag').classList.add('hidden'); return; }
+  clearPreviewMates();
+  // Flank slightly ahead of the player so they are in view at yaw 0 (forward = -Z).
+  const sx = P.x, sz = P.z, yaw = P.yaw;
+  const fwdX = -Math.sin(yaw), fwdZ = -Math.cos(yaw), rightX = Math.cos(yaw), rightZ = -Math.sin(yaw);
+  for (let i = 0; i < wantMates; i++) {
+    const side = i === 0 ? -1.35 : 1.35, ahead = 1.7 + i * 0.25;
+    const x = sx + fwdX * ahead + rightX * side, z = sz + fwdZ * ahead + rightZ * side;
+    const g = MP.spawnDummy(MATE_NAMES[i], i, x, z);
+    g.rotation.y = yaw;
+    g.userData.followSide = side;
+    g.userData.followAhead = ahead;
+    poseSoldier(g, { dt: 0, t: 0, speed: 0, fwd: 0, pitch: 0, down: false });
+  }
+  $('mpTag').textContent = 'PREVIEW · LOCAL TEAMMATES';
+  $('mpTag').classList.remove('hidden');
+}
+function updatePreviewMates(dt, t) {
+  if (!wantMates || MP?.on) return;
+  const remotes = MP?.S?.remotes; if (!remotes || !remotes.size) return;
+  const fwdX = -Math.sin(P.yaw), fwdZ = -Math.cos(P.yaw), rightX = Math.cos(P.yaw), rightZ = -Math.sin(P.yaw);
+  for (const g of remotes.values()) {
+    const ahead = g.userData.followAhead || 1.7, side = g.userData.followSide || -1.35;
+    const tx = P.x + fwdX * ahead + rightX * side, tz = P.z + fwdZ * ahead + rightZ * side;
+    const dx = tx - g.position.x, dz = tz - g.position.z, dist = Math.hypot(dx, dz);
+    let vx = 0, vz = 0, spd = 0;
+    if (dist > 0.28) {
+      const maxSpd = dist > 5 ? 5.4 : dist > 2 ? 3.5 : 2.1;
+      spd = Math.min(maxSpd, dist / Math.max(dt, 0.016));
+      const step = Math.min(dist, spd * dt), inv = 1 / dist;
+      vx = dx * inv * spd; vz = dz * inv * spd;
+      g.position.x += dx * inv * step; g.position.z += dz * inv * step;
+      g.rotation.y = Math.atan2(-dx, -dz);
+    } else {
+      g.rotation.y = lerpAng(g.rotation.y, P.yaw, Math.min(1, dt * 4));
+    }
+    const yaw = g.rotation.y;
+    const fwd = vx * -Math.sin(yaw) + vz * -Math.cos(yaw);
+    const str = vx * Math.cos(yaw) + vz * -Math.sin(yaw);
+    const camDist = Math.hypot(cam.position.x - g.position.x, cam.position.y - 1.5, cam.position.z - g.position.z);
+    poseSoldier(g, { dt, t, speed: spd, fwd, strafe: str, pitch: 0, down: false, dist: camDist });
+  }
+}
+
 /* ---------------- game flow ---------------- */
 function newGame() {
   Object.assign(P, { x: MAP.spawn.x, z: MAP.spawn.z, yaw: 0, pitch: 0, vx: 0, vz: 0, hp: PLAYER_MAX_HP, lastHit: -99, pts: MODE.startPts, kills: 0, heads: 0, rP: 0, rY: 0, shake: 0, dmg: 0, cur: 0, fireCd: 0, reloadT: 0, switchT: 0, kick: 0, dead: false, deadT: 0, slots: [slotOf('pistol'), null], nades: 1 });
@@ -375,12 +433,13 @@ function newGame() {
 function startGame() {
   sfx.init(); sfx.musicStart(); sfx.setMusicDetail(tier === 0 || isTouch); newGame(); lb.start(); G.state = 'playing'; showGun(); ['menu', 'over', 'pause'].forEach((i) => $(i).classList.add('hidden')); $('hud').classList.remove('hidden'); $('touch').classList.toggle('hidden', !isTouch);
   beam.visible = tier > 0 && P.flashlight; adaptGrace = 3; fpsAcc = 0; fpsN = 0;
+  spawnPreviewMates();
   if (!isTouch && !qs.has('test') && G.mpPhase !== 'lobby') { try { const r = canvas.requestPointerLock?.(); r?.catch?.(() => {}); } catch (e) {} } else if (isTouch && G.mpPhase !== 'lobby') goFull();
-  toast(isTouch ? 'Hold E at windows to repair · Open the gate for new guns' : 'Hold E at windows to repair · Open the gate for new guns');
+  toast(wantMates && !MP?.on ? 'Local teammate preview — they follow you. This is not live co-op.' : (isTouch ? 'Hold E at windows to repair · Open the gate for new guns' : 'Hold E at windows to repair · Open the gate for new guns'));
 }
 function pause() { if (G.state !== 'playing' || P.dead) return; G.state = 'paused'; $('pause').classList.remove('hidden'); input.fire = false; input.f = input.s = 0; if (document.pointerLockElement) document.exitPointerLock?.(); setPrompt(''); }
 function resume() { if (G.state !== 'paused') return; G.state = 'playing'; $('pause').classList.add('hidden'); sfx.init(); if (!isTouch && !qs.has('test')) { try { canvas.requestPointerLock?.()?.catch?.(() => {}); } catch (e) {} } }
-function toMenu() { sfx.musicStop(); if (voice) voice.leave(); $('btnVoice').classList.add('hidden'); $('voiceList').classList.add('hidden'); if (MP?.on) { MP.stop(); $('mpTag').classList.add('hidden'); } G.mpPhase = ''; G.state = 'menu'; ['pause', 'over', 'lobby'].forEach((i) => $(i).classList.add('hidden')); $('menu').classList.remove('hidden'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); renderScores($('scoreList'), loadScores()); refreshGlobal(); zombies.reset(); if (P.gun) P.gun.visible = false; setPrompt(''); P.dead = false; flashSprite.visible = false; }
+function toMenu() { sfx.musicStop(); if (voice) voice.leave(); $('btnVoice').classList.add('hidden'); $('voiceList').classList.add('hidden'); clearPreviewMates(); if (MP?.on) MP.stop(); $('mpTag').classList.add('hidden'); G.mpPhase = ''; G.state = 'menu'; ['pause', 'over', 'lobby'].forEach((i) => $(i).classList.add('hidden')); $('menu').classList.remove('hidden'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); renderScores($('scoreList'), loadScores()); refreshGlobal(); zombies.reset(); if (P.gun) P.gun.visible = false; setPrompt(''); P.dead = false; flashSprite.visible = false; }
 function gameOver() {
   sfx.musicStop(); G.state = 'over'; const list = saveScore({ round: Math.max(1, G.round), kills: P.kills, pts: P.pts, t: Date.now() });
   $('oRound').textContent = Math.max(1, G.round); $('oKills').textContent = P.kills; $('oHeads').textContent = P.heads; $('oPts').textContent = P.pts.toLocaleString(); const s = Math.floor(G.runTime); $('oTime').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
@@ -406,7 +465,7 @@ function tick(dt) {
   if (P.dead) {
     P.deadT += dt; if (MP?.on) MP.update(dt, t, cbs); else zombies.update(dt, t, P, world.door, { ...cbs, hitPlayer: () => {} }); world.update(dt, t, P); fx.update(dt); updateCamera(dt, t); if (MP?.on && P.deadT > 0.8) { const who = MP.spectate(cam); gunRoot.visible = false; $('specTag').textContent = who ? 'DOWN · SPECTATING ' + who : 'DOWN · waiting for the round to end'; $('specTag').classList.remove('hidden'); } if (P.deadT > 2.4 && !MP?.on) gameOver(); return;
   }
-  movePlayer(dt); updateWeapons(dt);
+  movePlayer(dt); updateWeapons(dt); if (wantMates && !MP?.on) updatePreviewMates(dt, t);
   // regen
   if (!MP?.on && P.hp < P.maxHp && t - P.lastHit > REGEN_DELAY) P.hp = Math.min(P.maxHp, P.hp + REGEN_PER_SEC * dt);
   if (P.hp < P.maxHp * LOW_HP_FRAC && t - G.healBeat > 0.85) { G.healBeat = t; sfx.heart(); }
@@ -573,4 +632,4 @@ $('lobbyLeave').onclick = () => { $('lobby').classList.add('hidden'); toMenu(); 
 $('coQuick').onclick = () => MP.connect({ url: MP_URL, name: coName(), join: { map: MAP.id } });
 $('coCreate').onclick = () => MP.connect({ url: MP_URL, name: coName(), join: { create: true, map: MAP.id } });
 $('coJoin').onclick = () => { const c = $('coCode').value.trim().toUpperCase(); if (!/^[A-Z2-9]{5}$/.test(c)) { $('coMsg').textContent = 'Room codes are 5 letters/numbers'; return; } MP.connect({ url: MP_URL, name: coName(), join: { code: c } }); };
-window.__game = { hd, MP, missions, grenades, get MODE() { return MODE; }, MAP, MAPS, PLAYER_MAX_HP, MEDKIT_HP_FRAC, MEDKIT_COOLDOWN, MEDKIT_HEAL_FRAC, medKitReady, medKitOnKill, G, P, world, zombies, fx, input, tick, startGame, shoot, applyTier, switchTo, startReload, pause, resume, toMenu, giveWeapon, spawnPower, pickPower, interact, findFocus, die, get tier() { return tier; }, cam, renderer, scene, WEAPONS, sfx, renderOnce, aimAt(z, head = false) { const dx = z.pos.x - P.x, dz = z.pos.z - P.z, dy = (head ? 1.66 : 1.0) * z.scale - 1.7; P.yaw = Math.atan2(-dx, -dz); P.pitch = Math.atan2(dy, Math.hypot(dx, dz)); P.rP = P.rY = 0; }, isTouch };
+window.__game = { hd, MP, missions, grenades, get MODE() { return MODE; }, MAP, MAPS, PLAYER_MAX_HP, MEDKIT_HP_FRAC, MEDKIT_COOLDOWN, MEDKIT_HEAL_FRAC, medKitReady, medKitOnKill, G, P, world, zombies, fx, input, tick, startGame, shoot, applyTier, switchTo, startReload, pause, resume, toMenu, giveWeapon, spawnPower, pickPower, interact, findFocus, die, get tier() { return tier; }, cam, renderer, scene, WEAPONS, sfx, renderOnce, wantMates, aimAt(z, head = false) { const dx = z.pos.x - P.x, dz = z.pos.z - P.z, dy = (head ? 1.66 : 1.0) * z.scale - 1.7; P.yaw = Math.atan2(-dx, -dz); P.pitch = Math.atan2(dy, Math.hypot(dx, dz)); P.rP = P.rY = 0; }, isTouch };
