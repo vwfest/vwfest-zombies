@@ -54,6 +54,16 @@ export class Sound {
   }
   zhit(pan = 0, head = false) { if (!this.ok) return; const t = this.ctx.currentTime, o = this.out(pan, 0.2); this.nz(t, 0.09, 'lowpass', 700, 120, 0.5, o); this.tone(t, 0.1, 'sine', 120, 50, 0.4, o); if (head) this.tone(t, 0.08, 'triangle', 900, 500, 0.12, o); }
   zdie(pan = 0, vol = 0.4) { if (!this.ok) return; this.groan(pan, vol, 0.75, 0.7); const t = this.ctx.currentTime + 0.15, o = this.out(pan, 0.25); this.nz(t, 0.25, 'lowpass', 500, 60, 0.6, o); this.tone(t, 0.3, 'sine', 90, 35, 0.5, o); }
+  shriek(pan = 0, vol = 0.65) {
+    if (!this.ok) return; const t = this.ctx.currentTime, o = this.out(pan, 0.4);
+    this.tone(t, 0.38, 'sawtooth', 1860, 680, vol * 0.22, o, 0.008);
+    this.tone(t, 0.3, 'square', 1280, 420, vol * 0.1, o, 0.01);
+    this.nz(t, 0.32, 'bandpass', 1900, 550, vol * 0.5, o, 5);
+    this.tone(t + 0.14, 0.24, 'sawtooth', 880, 240, vol * 0.16, o);
+  }
+  birdHit(pan = 0) { if (!this.ok) return; const t = this.ctx.currentTime, o = this.out(pan, 0.2); this.nz(t, 0.08, 'bandpass', 1400, 400, 0.45, o, 2); this.nz(t, 0.1, 'lowpass', 500, 80, 0.35, o); }
+  birdDie(pan = 0) { if (!this.ok) return; this.shriek(pan, 0.45); const t = this.ctx.currentTime + 0.12, o = this.out(pan, 0.3); this.nz(t, 0.28, 'lowpass', 400, 60, 0.55, o); this.tone(t, 0.25, 'sine', 80, 30, 0.45, o); }
+  birdThud(pan = 0) { if (!this.ok) return; const t = this.ctx.currentTime, o = this.out(pan, 0.15); this.nz(t, 0.12, 'lowpass', 200, 40, 0.5, o); }
   tick(kill) { if (!this.ok) return; const t = this.ctx.currentTime, o = this.out(0, 0); this.tone(t, 0.05, 'square', kill ? 900 : 1500, kill ? 600 : 1300, kill ? 0.12 : 0.07, o); }
   cash() { if (!this.ok) return; const t = this.ctx.currentTime, o = this.out(0, 0.2); this.tone(t, 0.12, 'triangle', 1250, 1250, 0.22, o); this.tone(t + 0.07, 0.25, 'triangle', 1880, 1880, 0.22, o); this.nz(t, 0.05, 'highpass', 5000, 8000, 0.15, o); }
   deny() { if (!this.ok) return; const t = this.ctx.currentTime, o = this.out(0, 0); this.tone(t, 0.22, 'sawtooth', 130, 90, 0.2, o); this.tone(t + 0.1, 0.22, 'sawtooth', 110, 80, 0.2, o); }

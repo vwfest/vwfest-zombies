@@ -103,6 +103,13 @@ export class FX {
   }
   smoke(p, dir, count = 2) { for (let i = 0; i < count; i++) this.soft.emit(p.x, p.y, p.z, dir.x * 1.2 + rnd(-0.2, 0.2), dir.y * 1.2 + rnd(0.1, 0.5), dir.z * 1.2 + rnd(-0.2, 0.2), rnd(0.5, 1), 0.05, 0.28, 0.55, 0.55, 0.58, 0.25, -0.4, 2); }
   flash(p, dir) { this.add.emit(p.x, p.y, p.z, dir.x * 1, dir.y * 1, dir.z * 1, 0.06, 0.45, 0.8, 5, 3.4, 1.4, 1, 0, 0); for (let i = 0; i < 3; i++) this.add.emit(p.x, p.y, p.z, dir.x * rnd(3, 9) + rnd(-2, 2), dir.y * rnd(3, 9) + rnd(-2, 2), dir.z * rnd(3, 9) + rnd(-2, 2), rnd(0.08, 0.18), 0.1, 0.02, 4, 2.2, 0.6, 1, 2, 1); }
+  feathers(p, n, count = 12) {
+    const nx = n?.x || 0, ny = (n?.y ?? 1), nz = n?.z || 0;
+    for (let i = 0; i < count; i++) {
+      const a = rnd(TAU), s = rnd(0.7, 2.6);
+      this.soft.emit(p.x, p.y, p.z, Math.cos(a) * s + nx * 1.2, rnd(0.6, 2.4) + ny * 0.4, Math.sin(a) * s + nz * 1.2, rnd(0.55, 1.3), 0.07, 0.02, rnd(0.12, 0.28), rnd(0.08, 0.16), rnd(0.06, 0.1), 0.95, 5.5, 0.7);
+    }
+  }
   glowBurst(p, r, g, b, count = 24, speed = 4) { for (let i = 0; i < count; i++) { const a = rnd(TAU), e = rnd(-0.6, 1), s = rnd(0.4, 1) * speed; this.add.emit(p.x, p.y, p.z, Math.cos(a) * s, e * s, Math.sin(a) * s, rnd(0.5, 1.1), 0.18, 0.02, r, g, b, 1, 2, 1.2); } }
   update(dt) {
     this.soft.update(dt); this.add.update(dt);

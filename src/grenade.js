@@ -90,6 +90,13 @@ export function createGrenades(ctx) {
       const dmg = 200 * (1 - d / BLAST) + 50;
       const r = zombies.damage(z, dmg, false); if (r?.killed) ctx.onKill?.(z);
     }
+    const birds = ctx.birds;
+    if (birds) for (const b of birds.list) {
+      if (b.state === 'dead' || b.state === 'dying') continue;
+      const d = Math.hypot(b.x - g.x, b.y - g.y, b.z - g.z); if (d > BLAST) continue;
+      const dmg = 200 * (1 - d / BLAST) + 50;
+      const r = birds.damage(b, dmg, false); if (r?.killed) (ctx.onBirdKill || ctx.onKill)?.(b);
+    }
     const P = ctx.P; if (P) { const d = Math.hypot(P.x - g.x, P.z - g.z); if (d < 3.2) ctx.onSelf?.(55 * (1 - d / 3.2)); }
   }
   function step(dt) {

@@ -8,6 +8,7 @@ import { createGrenades } from './grenade.js';
 import { buildWorld, getMap, MAPS } from './maps/index.js';
 import { getMode, scaled } from './modes.js';
 import { Zombies } from './zombie.js';
+import { Birds, birdCount, isFlockRound, FIRST_ROUND as BIRD_ROUND } from './birds.js';
 import { upgradeZombies } from './hd/zombies.js';
 import { loadPacks } from './hd/pack.js';
 import { addGore } from './hd/gore.js';
@@ -65,7 +66,8 @@ const fx = new FX(scene, textures, tier);
 const motes = new Motes(textures, 260, { R: 20, y0: 0.3, y1: 6, size: 0.07, alpha: 0.22 }); scene.add(motes.points);
 const mist = new Motes(textures, 46, { R: 55, y0: 0.4, y1: 2.2, size: 5.5, alpha: 0.045, col: [0.55, 0.5, 0.62], additive: false, speed: 0.7 }); scene.add(mist.points);
 const zombies = new Zombies(scene, world, tier);
-const grenades = createGrenades({ scene, world, fx, zombies, sfx, blood: (x, z, s) => hd.blood(x, z, s), get P() { return P; }, onKill: (z) => { if (!MP?.on) missions?.onKill(z); }, onSelf: (d) => { if (P.dead) return; P.hp -= d; P.lastHit = G.time; if (P.hp <= 0) die(); } });
+const birds = new Birds(scene, world, tier);
+const grenades = createGrenades({ scene, world, fx, zombies, sfx, blood: (x, z, s) => hd.blood(x, z, s), get P() { return P; }, get birds() { return birds; }, onKill: (z) => { if (!MP?.on) missions?.onKill(z); }, onBirdKill: (b) => creditBird(b, { p: b.pos, n: { x: 0, y: 1, z: 0 }, head: false }), onSelf: (d) => { if (P.dead) return; P.hp -= d; P.lastHit = G.time; if (P.hp <= 0) die(); } });
 if (zKit) { rigZombies(zombies, zKit); window.__hd = { kit: zKit.hi ? 'hi' : 'lo' }; } else { window.__hd = upgradeZombies(zombies); addGore(zombies); } zombies.cam = cam;
 let mm; const minimap = (dt) => (mm || (mm = makeMinimap(world, zombies, P)))(dt);
 const viewScene = new THREE.Scene(); const post = new Post(renderer, scene, cam, viewScene);
@@ -90,7 +92,7 @@ function gunModel(id) { if (!gunCache[id]) { const g = buildViewmodel(id); g.vis
 
 /* ---------------- state ---------------- */
 const P = { x: 0, z: 12, yaw: 0, pitch: 0, vx: 0, vz: 0, hp: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP, lastHit: -99, pts: 500, kills: 0, heads: 0, bob: 0, rP: 0, rY: 0, shake: 0, dmg: 0, flashlight: true, slots: [], cur: 0, fireCd: 0, reloadT: 0, reloadTot: 0, switchT: 0, kick: 0, mv: 0, sprint: false, heat: 0, dead: false, deadT: 0, sx: 0, sy: 0, nades: 1 };
-const G = { state: 'menu', time: 0, runTime: 0, round: 0, toSpawn: 0, spawnT: 0, interT: 0, phase: 'wait', drops: 0, lastDrop: -99, kills: 0, double: 0, powers: [], ups: [], repairT: 0, healBeat: 0, lastMed: -99, orbit: 0, menuSpawn: 0, flashT: 0, muzzleT: 0, nadeCd: 0 };
+const G = { state: 'menu', time: 0, runTime: 0, round: 0, toSpawn: 0, spawnT: 0, interT: 0, phase: 'wait', drops: 0, lastDrop: -99, kills: 0, double: 0, powers: [], ups: [], repairT: 0, healBeat: 0, lastMed: -99, orbit: 0, menuSpawn: 0, flashT: 0, muzzleT: 0, nadeCd: 0, toBird: 0, birdT: 0 };
 const input = { f: 0, s: 0, l: 0, r: 0, fire: false, reload: false, interact: false, interactEdge: false, sprint: false };
 const slotOf = (id) => ({ id, mag: WEAPONS[id].mag, reserve: WEAPONS[id].reserve });
 const cur = () => P.slots[P.cur];
@@ -103,7 +105,7 @@ function applyTier(t) {
   renderer.setPixelRatio(pr); post.pr = pr;
   renderer.shadowMap.enabled = t > 0; renderer.shadowMap.needsUpdate = true;
   post.build(['direct', 'bloom', 'full'][t]); resize();
-  world.setTier(t); zombies.setTier(t); hd.setTier(t); if (hdStarted) { hd.load(t); hdKit(t); } zombies.max = MAP.cap[t > 0 ? 1 : 0]; fx.tier = t; motes.points.visible = t > 0; mist.points.visible = true; mist.o.alpha = t === 0 ? 0.03 : 0.045; beam.visible = t > 0 && P.flashlight;
+  world.setTier(t); zombies.setTier(t); birds.setTier(t); hd.setTier(t); if (hdStarted) { hd.load(t); hdKit(t); } zombies.max = MAP.cap[t > 0 ? 1 : 0]; fx.tier = t; motes.points.visible = t > 0; mist.points.visible = true; mist.o.alpha = t === 0 ? 0.03 : 0.045; beam.visible = t > 0 && P.flashlight;
   scene.environmentIntensity = t === 0 ? 0.45 : 0.3;
   spot.castShadow = t === 2; for (const z of zombies.list) z.root.traverse((o) => { if (o.isMesh) o.castShadow = t > 0; });
   scene.traverse((o) => { if (o.material && !Array.isArray(o.material)) o.material.needsUpdate = true; });
@@ -179,8 +181,9 @@ function shoot() {
   const hits = new Map(); let wallFx = 0; const mpDirs = [];
   for (let i = 0; i < W.pellets; i++) {
     const a = rnd(TAU), rr = Math.sqrt(Math.random()) * spread; const dir = _d.clone().copy(base).addScaledVector(_r, Math.cos(a) * rr).addScaledVector(_u, Math.sin(a) * rr).normalize(); mpDirs.push([+dir.x.toFixed(4), +dir.y.toFixed(4), +dir.z.toFixed(4)]);
-    const zh = zombies.rayHit(_o, dir, W.range), wh = world.ray(_o, dir, W.range); let tEnd = W.range, endN = null, zhit = null;
-    if (zh && (!wh || zh.t < wh.t)) { tEnd = zh.t; zhit = zh; } else if (wh) { tEnd = wh.t; endN = wh.n; }
+    const zh = zombies.rayHit(_o, dir, W.range), bh = !MP?.on ? birds.rayHit(_o, dir, W.range) : null, wh = world.ray(_o, dir, W.range); let tEnd = W.range, endN = null, zhit = null;
+    const ent = [zh, bh].filter(Boolean).sort((a, b) => a.t - b.t)[0];
+    if (ent && (!wh || ent.t < wh.t)) { tEnd = ent.t; zhit = ent; } else if (wh) { tEnd = wh.t; endN = wh.n; }
     const end = new THREE.Vector3().copy(dir).multiplyScalar(tEnd).add(_o);
     if (i < (W.pellets > 1 ? 3 : 1) || fx.tier > 0) fx.tracer(_m, end, W.pellets > 1 ? 0.006 : 0.011);
     if (zhit) { const e = hits.get(zhit.z) || { dmg: 0, head: false, p: end, n: dir.clone().negate() }; const fall = W.pellets > 1 ? clamp(1.25 - zhit.t / 16, 0.25, 1) : 1; e.dmg += W.dmg * (zhit.head ? W.head : 1) * fall; e.head = e.head || zhit.head; e.p = end; hits.set(zhit.z, e); }
@@ -194,6 +197,7 @@ function shoot() {
   // apply damage (co-op: the server decides damage, kills and points; we only show blood)
   if (MP?.on) { MP.send({ t: 'shot', w: s.id, dirs: mpDirs }); for (const [z, e] of hits) { fx.blood(e.p, e.n, e.head ? 14 : 8); sfx.zhit(pan(z.pos), e.head); } }
   else for (const [z, e] of hits) {
+    if (z.kind === 'bird') { creditBirdShot(z, e); continue; }
     const r = zombies.damage(z, e.dmg, e.head, e.p, e.n); if (!r) continue; const dbl = G.double > 0 ? 2 : 1;
     sfx.zhit(pan(z.pos), e.head); fx.blood(e.p, e.n, e.head ? 14 : 8); fx.sparks(e.p, e.n, 2);
     let gain = 10 * dbl; const hm = $('hitm'); hm.classList.remove('on', 'kill'); void hm.offsetWidth; hm.classList.add('on'); sfx.tick(false);
@@ -204,6 +208,24 @@ function shoot() {
   if (s.mag === 0 && !P.reloadT) setTimeout(() => G.state === 'playing' && startReload(), 220);
 }
 const pan = (p) => { const dx = p.x - P.x, dz = p.z - P.z, d = Math.hypot(dx, dz) || 1; return (dx * Math.cos(P.yaw) - dz * Math.sin(P.yaw)) / d; };
+function flashHit(killed) { const hm = $('hitm'); hm.classList.remove('on', 'kill'); void hm.offsetWidth; hm.classList.add('on'); if (killed) hm.classList.add('kill'); setTimeout(() => hm.classList.remove('on'), killed ? 280 : 190); }
+function creditBirdShot(b, e) {
+  const r = birds.damage(b, e.dmg, e.head); if (!r) return;
+  sfx.birdHit(pan(b.pos)); fx.blood(e.p, e.n, e.head ? 10 : 6); fx.feathers(e.p, e.n, e.head ? 8 : 5);
+  creditBird(b, e, r);
+}
+function creditBird(b, e, r) {
+  if (!r) r = { killed: b.state === 'dying' || b.hp <= 0, head: !!e.head };
+  const dbl = G.double > 0 ? 2 : 1;
+  let gain = 10 * dbl; flashHit(r.killed); sfx.tick(r.killed);
+  if (r.killed) {
+    gain = (e.head ? 70 : b.value) * dbl; P.kills++; G.kills++; if (e.head) P.heads++;
+    sfx.birdDie(pan(b.pos)); fx.blood(e.p || b.pos, e.n || { x: 0, y: 1, z: 0 }, 22, 1.2);
+    fx.feathers(b.pos, e.n || { x: 0, y: 1, z: 0 }, 22);
+    P.shake = Math.min(1, P.shake + 0.08); maybeDrop(b); medKitOnKill(b); if (!MP?.on) missions?.onKill(b);
+  }
+  P.pts += gain; popText('+' + gain, e.head && r.killed);
+}
 function maybeDrop(z) { if (G.round < 2 || G.drops >= MODE.maxDrops || G.time - G.lastDrop < 18) return; if (Math.random() < 0.05 * MODE.drop) spawnPower(pick(['ammo', 'double', 'nuke']), z.pos.x, z.pos.z); }
 
 /* ---------------- power-ups ---------------- */
@@ -226,7 +248,7 @@ function pickPower(u) {
   sfx.power(u.type); const dbl = 0; banner(PW[u.type].name, PW[u.type].sub);
   if (u.type === 'ammo') { for (const s of P.slots) if (s) { s.mag = WEAPONS[s.id].mag; s.reserve = WEAPONS[s.id].reserve; } }
   else if (u.type === 'double') G.double = 30;
-  else if (u.type === 'nuke') { const ks = zombies.killAll(); for (const z of ks) { if (!MP?.on) missions.onKill(z); fx.blood(new THREE.Vector3(z.pos.x, 1.2, z.pos.z), { x: 0, y: 1, z: 0 }, 22, 1.4); fx.glowBurst(new THREE.Vector3(z.pos.x, 1.2, z.pos.z), 3, 1.5, 0.4, 10, 5); } P.pts += 400 * (G.double > 0 ? 2 : 1); sfx.boom(); P.shake = 1; $('fx-flash').style.transition = 'none'; $('fx-flash').style.opacity = 0.85; requestAnimationFrame(() => { $('fx-flash').style.transition = 'opacity 1.2s'; $('fx-flash').style.opacity = 0; }); G.kills += ks.length; P.kills += ks.length; }
+  else if (u.type === 'nuke') { const ks = zombies.killAll(); const bs = birds.killAll(); for (const z of ks) { if (!MP?.on) missions.onKill(z); fx.blood(new THREE.Vector3(z.pos.x, 1.2, z.pos.z), { x: 0, y: 1, z: 0 }, 22, 1.4); fx.glowBurst(new THREE.Vector3(z.pos.x, 1.2, z.pos.z), 3, 1.5, 0.4, 10, 5); } for (const b of bs) { if (!MP?.on) missions.onKill(b); fx.blood(b.pos, { x: 0, y: 1, z: 0 }, 16, 1.1); fx.feathers(b.pos, { x: 0, y: 1, z: 0 }, 16); } P.pts += 400 * (G.double > 0 ? 2 : 1); sfx.boom(); P.shake = 1; $('fx-flash').style.transition = 'none'; $('fx-flash').style.opacity = 0.85; requestAnimationFrame(() => { $('fx-flash').style.transition = 'opacity 1.2s'; $('fx-flash').style.opacity = 0; }); G.kills += ks.length; P.kills += ks.length; }
   scene.remove(u.g); fx.glowBurst(new THREE.Vector3(u.x, 1, u.z), ...PW[u.type].col.map((v) => v * 0.7), 24, 4);
 }
 
@@ -252,6 +274,12 @@ function updateCrate(dt) {
 function roundCount(r) { return Math.max(3, Math.round((6 + r * 2.3 + r * r * 0.12) * MODE.count)); }
 function startRound(n) {
   G.round = n; G.toSpawn = roundCount(n); G.brutes = n >= 5 ? (n % 5 === 0 ? Math.min(4, 1 + ((n / 5) | 0)) : n >= 7 ? 1 : 0) : 0; G.brutes = Math.round(G.brutes * MODE.brute); G.phase = 'round'; G.spawnT = 1.5; G.drops = 0;
+  G.toBird = 0; G.birdT = 1.8;
+  if (!MP?.on && n >= BIRD_ROUND) {
+    const flock = isFlockRound(n);
+    G.toBird = Math.min(birds.max, birdCount(n, MODE.count, flock));
+    if (flock) G.toSpawn = Math.max(4, G.toSpawn - Math.round(G.toBird * 0.5));
+  }
   if ((P.nades || 0) < 1) P.nades = 1;
   const line = sfx.lineFor('wave', '', n); sfx.round(n); sfx.setMusicPhase('hot'); banner('ROUND ' + n, line); if (!MP?.on) sfx.announce(line); const e = $('roundNum'); e.classList.remove('pulse'); void e.offsetWidth; e.classList.add('pulse');
 }
@@ -261,6 +289,13 @@ function trySpawn(dt) {
   if (zombies.alive >= zombies.max) { G.spawnT = 0.3; return; }
   const act = activeWindows(); act.sort((a, b) => (a.c.x - P.x) ** 2 + (a.c.z - P.z) ** 2 - ((b.c.x - P.x) ** 2 + (b.c.z - P.z) ** 2)); const w = Math.random() < 0.6 ? act[Math.min(act.length - 1, (Math.random() * 2) | 0)] : pick(act);
   const brute = G.brutes > 0 && G.toSpawn <= G.brutes; const zz = zombies.spawn(w, G.round, brute); if (zz) { G.toSpawn--; zz.hp = zz.maxHp = zz.maxHp * MODE.hp; zz.speed = Math.min(6.5, zz.speed * MODE.speed); zz.dmg = Math.round(zz.dmg * MODE.dmg); } G.spawnT = Math.max(0.3, 2.0 - G.round * 0.13) * rnd(0.7, 1.2) * MODE.spawnGap;
+}
+function trySpawnBirds(dt) {
+  if (MP?.on || G.phase !== 'round' || G.toBird <= 0) return;
+  G.birdT -= dt; if (G.birdT > 0) return;
+  if (birds.alive >= birds.max) { G.birdT = 0.35; return; }
+  if (birds.spawn(G.round)) G.toBird--;
+  G.birdT = rnd(0.3, 0.7);
 }
 
 /* ---------------- interaction ---------------- */
@@ -363,8 +398,8 @@ function renderScores(el, list) { el.innerHTML = list.length ? list.map((s, i) =
 /* ---------------- game flow ---------------- */
 function newGame() {
   Object.assign(P, { x: MAP.spawn.x, z: MAP.spawn.z, yaw: 0, pitch: 0, vx: 0, vz: 0, hp: PLAYER_MAX_HP, lastHit: -99, pts: MODE.startPts, kills: 0, heads: 0, rP: 0, rY: 0, shake: 0, dmg: 0, cur: 0, fireCd: 0, reloadT: 0, switchT: 0, kick: 0, dead: false, deadT: 0, slots: [slotOf('pistol'), null], nades: 1 });
-  Object.assign(G, { time: 0, runTime: 0, round: 0, toSpawn: 0, phase: 'wait', interT: 2.6, drops: 0, double: 0, kills: 0, repairT: 0, lastMed: -99 });
-  zombies.reset(); fx.reset(); for (const u of G.ups) scene.remove(u.g); G.ups = []; closeCrate(); world.crate.lid.rotation.x = 0;
+  Object.assign(G, { time: 0, runTime: 0, round: 0, toSpawn: 0, toBird: 0, birdT: 0, phase: 'wait', interT: 2.6, drops: 0, double: 0, kills: 0, repairT: 0, lastMed: -99 });
+  zombies.reset(); birds.reset(); fx.reset(); for (const u of G.ups) scene.remove(u.g); G.ups = []; closeCrate(); world.crate.lid.rotation.x = 0;
   for (const w of world.windows) while (w.count < 6) world.addPlank(w);
   hud.hp = hud.pts = hud.mag = hud.res = -1; hud.name = hud.alt = ''; hud.round = -1; $('hud').classList.remove('hud-dead');
   world.resetDoors(); if (missions) missions.reset(); if (grenades) grenades.reset();
@@ -378,7 +413,7 @@ function startGame() {
 }
 function pause() { if (G.state !== 'playing' || P.dead) return; G.state = 'paused'; $('pause').classList.remove('hidden'); input.fire = false; input.f = input.s = 0; if (document.pointerLockElement) document.exitPointerLock?.(); setPrompt(''); }
 function resume() { if (G.state !== 'paused') return; G.state = 'playing'; $('pause').classList.add('hidden'); sfx.init(); if (!isTouch && !qs.has('test')) { try { canvas.requestPointerLock?.()?.catch?.(() => {}); } catch (e) {} } }
-function toMenu() { sfx.musicStop(); if (voice) voice.leave(); $('btnVoice').classList.add('hidden'); $('voiceList').classList.add('hidden'); if (MP?.on) { MP.stop(); $('mpTag').classList.add('hidden'); } G.mpPhase = ''; G.state = 'menu'; ['pause', 'over', 'lobby'].forEach((i) => $(i).classList.add('hidden')); $('menu').classList.remove('hidden'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); renderScores($('scoreList'), loadScores()); refreshGlobal(); zombies.reset(); if (P.gun) P.gun.visible = false; setPrompt(''); P.dead = false; flashSprite.visible = false; }
+function toMenu() { sfx.musicStop(); if (voice) voice.leave(); $('btnVoice').classList.add('hidden'); $('voiceList').classList.add('hidden'); if (MP?.on) { MP.stop(); $('mpTag').classList.add('hidden'); } G.mpPhase = ''; G.state = 'menu'; ['pause', 'over', 'lobby'].forEach((i) => $(i).classList.add('hidden')); $('menu').classList.remove('hidden'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); renderScores($('scoreList'), loadScores()); refreshGlobal(); zombies.reset(); birds.reset(); if (P.gun) P.gun.visible = false; setPrompt(''); P.dead = false; flashSprite.visible = false; }
 function gameOver() {
   sfx.musicStop(); G.state = 'over'; const list = saveScore({ round: Math.max(1, G.round), kills: P.kills, pts: P.pts, t: Date.now() });
   $('oRound').textContent = Math.max(1, G.round); $('oKills').textContent = P.kills; $('oHeads').textContent = P.heads; $('oPts').textContent = P.pts.toLocaleString(); const s = Math.floor(G.runTime); $('oTime').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
@@ -388,6 +423,12 @@ function gameOver() {
 
 /* ---------------- main update ---------------- */
 const menuPlayer = { x: 0, z: 8 };
+const birdCbs = {
+  shriek: (b) => sfx.shriek(pan(b.pos), clamp(1 - Math.hypot(b.x - P.x, b.z - P.z) / 40, 0.15, 0.85)),
+  hitPlayer: (b) => hitPlayer(b),
+  strike: (b) => { fx.blood(new THREE.Vector3(P.x, 1.3, P.z), { x: 0, y: 1, z: 0 }, 10); sfx.birdHit(pan(b.pos)); },
+  thud: (b) => { if (!b._thud) { b._thud = true; sfx.birdThud(pan(b.pos)); fx.dust(new THREE.Vector3(b.x, 0.2, b.z), { x: 0, y: 1, z: 0 }, 6); fx.feathers(b.pos, { x: 0, y: 1, z: 0 }, 8); } },
+};
 const cbs = { groan: (z, d) => sfx.groan(pan(z.pos), clamp(1 - d / 40, 0.1, 0.8) * 0.8, z.brute ? 0.6 : z.runner ? 1.25 : rnd(0.9, 1.1), z.brute ? 1.4 : rnd(0.8, 1.3)), plank: (w, br) => { sfx.plank(true); fx.dust(new THREE.Vector3(w.c.x + w.n.x * 0.3, 1.4, w.c.z + w.n.z * 0.3), w.n, 6, [0.5, 0.4, 0.3]); }, hitPlayer };
 const cbsMenu = { groan: () => {}, plank: () => {}, hitPlayer: () => {} };
 function tick(dt) {
@@ -395,14 +436,15 @@ function tick(dt) {
   if (G.state === 'menu') {
     G.orbit += dt * 0.12; const a = G.orbit, R = 9.5; cam.position.set(Math.sin(a) * R, 2.6 + Math.sin(a * 0.7) * 0.4, 6 + Math.cos(a) * R * 0.8); cam.lookAt(0, 1.8, 3); cam.rotation.z = 0;
     G.menuSpawn -= dt; if (G.menuSpawn <= 0 && zombies.alive < 5) { G.menuSpawn = 2.2; const z = zombies.spawn(pick(world.windows.filter((w) => w.area === 'A')), 2); if (z) { z.state = 'chase'; z.pos.set(rnd(-14, 14), 0, rnd(-18, -4)); z.speed = rnd(0.9, 1.5); z.dmg = 0; } }
-    menuPlayer.x = 0; menuPlayer.z = 6; zombies.update(dt, t, menuPlayer, world.door, cbsMenu); world.update(dt, t, { x: cam.position.x, z: cam.position.z }); fx.update(dt); if (missions) missions.frame(cam); motes.center = { x: 0, z: 6 }; mist.center = motes.center; motes.ps.update(dt); mist.ps.update(dt); gunRoot.visible = false; beam.visible = false; return;
+    if (birds.alive < 6) { const b = birds.spawn(8); if (b) { b.dmg = 0; b.cool = 999; b.height = 7 + rnd(0, 2); } }
+    menuPlayer.x = 0; menuPlayer.z = 6; menuPlayer.hunt = false; zombies.update(dt, t, menuPlayer, world.door, cbsMenu); birds.update(dt, t, { x: 0, y: 1.6, z: 6, hunt: false }, birdCbs); world.update(dt, t, { x: cam.position.x, z: cam.position.z }); fx.update(dt); if (missions) missions.frame(cam); motes.center = { x: 0, z: 6 }; mist.center = motes.center; motes.ps.update(dt); mist.ps.update(dt); gunRoot.visible = false; beam.visible = false; return;
   }
   gunRoot.visible = true; beam.visible = tier > 0 && P.flashlight && !P.dead;
   if (G.state === 'paused') return;
   if (G.state === 'over') { fx.update(dt); return; }
   G.runTime += dt;
   if (P.dead) {
-    P.deadT += dt; if (MP?.on) MP.update(dt, t, cbs); else zombies.update(dt, t, P, world.door, { ...cbs, hitPlayer: () => {} }); world.update(dt, t, P); fx.update(dt); updateCamera(dt, t); if (MP?.on && P.deadT > 0.8) { const who = MP.spectate(cam); gunRoot.visible = false; $('specTag').textContent = who ? 'DOWN · SPECTATING ' + who : 'DOWN · waiting for the round to end'; $('specTag').classList.remove('hidden'); } if (P.deadT > 2.4 && !MP?.on) gameOver(); return;
+    P.deadT += dt; if (MP?.on) MP.update(dt, t, cbs); else { zombies.update(dt, t, P, world.door, { ...cbs, hitPlayer: () => {} }); birds.update(dt, t, P, { ...birdCbs, hitPlayer: () => {} }); } world.update(dt, t, P); fx.update(dt); updateCamera(dt, t); if (MP?.on && P.deadT > 0.8) { const who = MP.spectate(cam); gunRoot.visible = false; $('specTag').textContent = who ? 'DOWN · SPECTATING ' + who : 'DOWN · waiting for the round to end'; $('specTag').classList.remove('hidden'); } if (P.deadT > 2.4 && !MP?.on) gameOver(); return;
   }
   movePlayer(dt); updateWeapons(dt);
   // regen
@@ -411,10 +453,10 @@ function tick(dt) {
   // rounds
   if (MP?.on) MP.update(dt, t, cbs);
   else if (G.phase === 'wait') { G.interT -= dt; if (G.interT <= 0) startRound(1); }
-  else if (G.phase === 'round') { trySpawn(dt); if (G.toSpawn <= 0 && zombies.alive <= 0) { const cleared = G.round; G.phase = 'inter'; G.interT = MODE.inter; sfx.setMusicPhase('calm'); if (!MP?.on && missions) missions.onWave(cleared); } }
+  else if (G.phase === 'round') { trySpawn(dt); trySpawnBirds(dt); if (G.toSpawn <= 0 && (G.toBird || 0) <= 0 && zombies.alive <= 0 && birds.alive <= 0) { const cleared = G.round; G.phase = 'inter'; G.interT = MODE.inter; sfx.setMusicPhase('calm'); if (!MP?.on && missions) missions.onWave(cleared); } }
   else if (G.phase === 'inter') { G.interT -= dt; if (G.interT <= 0) startRound(G.round + 1); }
   if (G.state === 'playing') { const mood = G.phase === 'round' ? 'hot' : 'calm'; if (sfx.musicMood !== mood) sfx.setMusicPhase(mood); sfx.pumpMusic(); }
-  if (!MP?.on) { grenades.step(dt); zombies.update(dt, t, P, world.door, cbs); missions.update(dt); } else if (MP.S && MP.S.snaps && MP.S.snaps.length) { const last = MP.S.snaps[MP.S.snaps.length - 1]; grenades.sync(last.ng); grenades.interp(MP.frameAt?.(performance.now())); const me = last.p && last.p.find((p) => p[0] === MP.S.id); if (me && me.length > 15 && G.nadeCd <= 0) P.nades = me[15]; }
+  if (!MP?.on) { grenades.step(dt); zombies.update(dt, t, P, world.door, cbs); birds.update(dt, t, P, birdCbs); missions.update(dt); } else if (MP.S && MP.S.snaps && MP.S.snaps.length) { const last = MP.S.snaps[MP.S.snaps.length - 1]; grenades.sync(last.ng); grenades.interp(MP.frameAt?.(performance.now())); const me = last.p && last.p.find((p) => p[0] === MP.S.id); if (me && me.length > 15 && G.nadeCd <= 0) P.nades = me[15]; }
   grenades.frame(); if (G.nadeCd > 0) G.nadeCd -= dt;
   world.update(dt, t, P); minimap(dt); if (missions) missions.frame(cam); if (voice && voice.joined) voice.tick();
   motes.center = { x: P.x, z: P.z }; mist.center = motes.center; motes.ps.update(dt); mist.ps.update(dt); fx.update(dt); updateCrate(dt);
@@ -563,4 +605,4 @@ $('lobbyLeave').onclick = () => { $('lobby').classList.add('hidden'); toMenu(); 
 $('coQuick').onclick = () => MP.connect({ url: MP_URL, name: coName(), join: { map: MAP.id } });
 $('coCreate').onclick = () => MP.connect({ url: MP_URL, name: coName(), join: { create: true, map: MAP.id } });
 $('coJoin').onclick = () => { const c = $('coCode').value.trim().toUpperCase(); if (!/^[A-Z2-9]{5}$/.test(c)) { $('coMsg').textContent = 'Room codes are 5 letters/numbers'; return; } MP.connect({ url: MP_URL, name: coName(), join: { code: c } }); };
-window.__game = { hd, MP, missions, grenades, get MODE() { return MODE; }, MAP, MAPS, PLAYER_MAX_HP, MEDKIT_HP_FRAC, MEDKIT_COOLDOWN, MEDKIT_HEAL_FRAC, medKitReady, medKitOnKill, G, P, world, zombies, fx, input, tick, startGame, shoot, applyTier, switchTo, startReload, pause, resume, toMenu, giveWeapon, spawnPower, pickPower, interact, findFocus, die, get tier() { return tier; }, cam, renderer, scene, WEAPONS, sfx, renderOnce, aimAt(z, head = false) { const dx = z.pos.x - P.x, dz = z.pos.z - P.z, dy = (head ? 1.66 : 1.0) * z.scale - 1.7; P.yaw = Math.atan2(-dx, -dz); P.pitch = Math.atan2(dy, Math.hypot(dx, dz)); P.rP = P.rY = 0; }, isTouch };
+window.__game = { hd, MP, missions, grenades, birds, get MODE() { return MODE; }, MAP, MAPS, PLAYER_MAX_HP, MEDKIT_HP_FRAC, MEDKIT_COOLDOWN, MEDKIT_HEAL_FRAC, medKitReady, medKitOnKill, G, P, world, zombies, fx, input, tick, startGame, shoot, applyTier, switchTo, startReload, pause, resume, toMenu, giveWeapon, spawnPower, pickPower, interact, findFocus, die, get tier() { return tier; }, cam, renderer, scene, WEAPONS, sfx, renderOnce, aimAt(z, head = false) { const dx = z.pos.x - P.x, dz = z.pos.z - P.z; const targetY = z.kind === 'bird' ? z.pos.y + (head ? 0.12 : 0) : (head ? 1.66 : 1.0) * z.scale; const dy = targetY - 1.7; P.yaw = Math.atan2(-dx, -dz); P.pitch = Math.atan2(dy, Math.hypot(dx, dz)); P.rP = P.rY = 0; }, isTouch };

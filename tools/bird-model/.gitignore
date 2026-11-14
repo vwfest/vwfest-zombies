@@ -1,0 +1,6 @@
+# Regenerable / oversized intermediates. The build script is the source.
+work/
+renders/m-final/
+renders/m-final2/
+renders/m1-blockout/
+renders/ingame/
