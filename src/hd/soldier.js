@@ -51,6 +51,7 @@ export async function loadSoldierKit(hi) {
     map: diff, normalMap: nrm, roughnessMap: orm, metalnessMap: orm,
     roughness: 0.88, metalness: 0.05
   });
+  bodyMat.color.setScalar(0.74); // fabric albedo sits with the night grade; full-white tint blew out under the flashlight
   // albedo already has a gentle AO multiply; do not also hook aoMap
   const rifleMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.45, metalness: 0.32 });
   gltf.scene.updateMatrixWorld(true);

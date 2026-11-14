@@ -43,6 +43,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? '  PASS ' : '  FAIL ') + 
         if (S && scene === g.scene) window.__shotFrames = (window.__shotFrames || 0) + 1;
         if (S) {
           for (const z of g.zombies.list || []) { if (z.mesh) z.mesh.visible = false; }
+          window.__dummy.position.set(S.at[0], 0, S.at[1]);
           const U = window.__dummy.userData, A = U.acts;
           if (S.pose && A[S.pose]) { for (const k in A) { const on = k === S.pose; if (on && !A[k].isRunning()) A[k].play(); A[k].setEffectiveWeight(on ? 1 : 0); } U.mixer.update(0); window.__dummy.updateMatrixWorld(true); }
           g.cam.position.set(S.camPos[0], S.camPos[1], S.camPos[2]); g.cam.lookAt(S.look[0], S.look[1], S.look[2]); g.cam.updateMatrixWorld();
@@ -50,8 +51,10 @@ let fails = 0; const ok = (c, m) => { console.log((c ? '  PASS ' : '  FAIL ') + 
         try { return orig(scene, camera); } catch (e) { window.__hookErr = String(e && e.stack || e).slice(0, 300); throw e; }
       };
     });
-    const shot = async (name, camPos, look, pose, light = false) => {
-      await p.evaluate((S) => { window.__shot = S; const g = __game; g.P.flashlight = S.light; for (const ch of g.cam.children) if (ch.isSpotLight || ch.isMesh) ch.visible = !!S.light && (ch.isSpotLight || g.tier > 0); }, { camPos, look, pose, light });
+    const shot = async (name, camPos, look, pose, light = false) => { // camPos/look are relative to a dummy at (0, 8.2)
+      const AT = [11.4, 7.4]; // beside the yard lamp at (13.4, 5.9) so the teammate is front-lit at night
+      camPos = [camPos[0] + AT[0], camPos[1], camPos[2] + AT[1] - 8.2]; look = [look[0] + AT[0], look[1], look[2] + AT[1] - 8.2];
+      await p.evaluate((S) => { window.__shot = S; const g = __game; g.P.flashlight = S.light; for (const ch of g.cam.children) if (ch.isSpotLight || ch.isMesh) ch.visible = !!S.light && (ch.isSpotLight || g.tier > 0); }, { camPos, look, pose, light, at: AT });
       await p.evaluate(() => { window.__shotFrames = 0; });
       await p.waitForFunction(() => window.__shotFrames >= 4, null, { timeout: 90000, polling: 100 });
       await p.screenshot({ path: `${OUT}/${tag}-${name}.png` });
@@ -59,7 +62,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? '  PASS ' : '  FAIL ') + 
       if (dbg.err || process.env.DEBUG) console.log('   shot', name, JSON.stringify(dbg));
     };
     await shot('lowup-front', [0.25, 0.32, 6.1], [0, 1.45, 8.2]);
-    await shot('lowup-front-flashlight', [0.25, 0.32, 5.6], [0, 1.45, 8.2], null, true);
+    await shot('lowup-front-flashlight', [0.2, 0.6, 3.8], [0, 1.4, 8.2], null, true);
     await shot('lowup-tq', [1.7, 0.30, 6.6], [0, 1.4, 8.2]);
     await shot('lowup-close', [0.55, 0.45, 7.0], [0, 1.55, 8.2]);
     await shot('eye-mid', [0.4, 1.7, 3.6], [0, 1.1, 8.2]);
