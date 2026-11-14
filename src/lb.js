@@ -13,6 +13,6 @@ export const lb = {
     el.replaceChildren();
     if (!rows) { const li = document.createElement('li'); li.className = 'muted'; li.textContent = 'Leaderboard unavailable.'; el.append(li); return; }
     if (!rows.length) { const li = document.createElement('li'); li.className = 'muted'; li.textContent = 'No survivors yet. Be first.'; el.append(li); return; }
-    for (const r of rows.slice(0, 10)) { const li = document.createElement('li'); if (me && r.nickname === me) li.className = 'me'; const n = document.createElement('b'); n.textContent = String(r.nickname); li.append(n, ' · Round ' + (r.score | 0) + ' · ' + (r.aux | 0).toLocaleString() + ' pts'); el.append(li); }
+    for (const r of rows.slice(0, 5)) { const li = document.createElement('li'); if (me && r.nickname === me) li.className = 'me'; const n = document.createElement('b'); n.textContent = String(r.nickname); li.append(n, ' · Round ' + (r.score | 0) + ' · ' + (r.aux | 0).toLocaleString() + ' pts'); el.append(li); }
   },
 };
