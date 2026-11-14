@@ -3,7 +3,7 @@
 const path = require('path');
 const PATHS = [process.env.GLTF_TRANSFORM_PATHS || '/workspace/zz-art-bible/pipeline', __dirname];
 const req = (m) => require(require.resolve(m, { paths: PATHS }));
-const RAW = '/workspace/zz-soldier-shots/v2/work/raw';
+const RAW = (process.env.SOLDIER_WORK || '/workspace/zz-soldier-shots/v3/work') + '/raw';
 const OUT = path.join(__dirname, '../../assets/hd/soldier');
 (async () => {
   const { NodeIO } = await req('@gltf-transform/core');

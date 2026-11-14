@@ -4,9 +4,9 @@ DUST & DEAD co-op soldier v2, built from "Sand soldier (outdated)" by buh (CC BY
 + NVG parts from "Military Character Kit 1.1" (CC0) by britdawgmasterfunk. Original rifle + camo.
 
   blender -b --python tools/hd/sand_build.py -- --stage pose|rig|anim|export|all
-Stages save .blend files in /workspace/zz-soldier-shots/v2/work so they can be re-run separately.
+Stages save .blend files in /workspace/zz-soldier-shots/v3/work (SOLDIER_WORK) so they can be re-run separately.
 """
-import sys, math, argparse
+import os, sys, math, argparse
 from pathlib import Path
 import bpy, bmesh
 from mathutils import Vector, Matrix, Euler
@@ -15,8 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import soldier_build as sb  # helpers: armature, anims, rifle primitives, export
 
 SRC = Path('/workspace/zz-free-models/src')
-WORK = Path('/workspace/zz-soldier-shots/v2/work')
-SHOTS = Path('/workspace/zz-soldier-shots/v2')
+WORK = Path(os.environ.get('SOLDIER_WORK', '/workspace/zz-soldier-shots/v3/work'))
+SHOTS = WORK.parent
 ASSETS = Path('/workspace/zz-soldier/assets/hd/soldier')
 WORK.mkdir(parents=True, exist_ok=True)
 sb.SHOTS = WORK
@@ -113,7 +113,7 @@ def lights():
         o = bpy.data.objects.new(nm, L); o.rotation_euler = rot; bpy.context.scene.collection.objects.link(o)
 
 
-RIFLE_LOC = (0.11, -0.19, 1.16)
+RIFLE_LOC = (0.124, -0.169, 1.176)  # v3: slid 3 cm back along the bore so the support hand reaches the handguard
 RIFLE_ROT = (math.radians(32), math.radians(6), math.radians(-30))
 
 def build_rifle2():
@@ -271,7 +271,7 @@ CURL_SIGN = {'R': 1, 'L': 1}
 PALM_FLIP = {'R': True, 'L': False}
 # grip frames in rifle-local coords (barrel -Y, up +Z): wrist, knuckles, thumb tip
 GRIP_R = {'W': (0.036, 0.080, 0.000), 'K': (0.030, 0.005, -0.048), 'T': (0.022, 0.050, 0.060)}
-GRIP_L = {'W': (-0.040, -0.120, -0.012), 'K': (0.008, -0.185, -0.018), 'T': (-0.055, -0.185, 0.010)}
+GRIP_L = {'W': (-0.040, -0.085, -0.004), 'K': (0.008, -0.150, -0.010), 'T': (-0.055, -0.150, 0.018)}
 POLE_R = (0.30, 0.55, 0.85)
 POLE_L = (-0.45, 0.25, 0.85)
 
