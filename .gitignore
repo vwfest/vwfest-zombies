@@ -6,3 +6,4 @@ server/node_modules/
 android/
 .gradle/
 tools/hd/__pycache__/
+tools/soldier-preview.bundle.js
