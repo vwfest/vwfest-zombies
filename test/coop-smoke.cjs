@@ -15,6 +15,7 @@ const exe = process.env.CHROME || undefined;
   ok(await B.evaluate((r) => __game.MP.S.room === r, room), 'B joined the same room');
   await A.waitForFunction(() => __game.MP.S.remotes.size === 1, null, { timeout: 10000 }).catch(() => {});
   ok(await A.evaluate(() => __game.MP.S.remotes.size === 1) && await B.evaluate(() => __game.MP.S.remotes.size === 1), 'each client renders the other player');
+  await A.click('#lobbyReady'); await B.tap('#lobbyReady');
   await A.waitForFunction(() => __game.MP.S.slot.size > 0, null, { timeout: 30000 }).catch(() => {});
   await B.waitForFunction(() => __game.MP.S.slot.size > 0, null, { timeout: 15000 }).catch(() => {});
   const za = await A.evaluate(() => [...__game.MP.S.slot.keys()].sort().join()), zb = await B.evaluate(() => [...__game.MP.S.slot.keys()].sort().join());

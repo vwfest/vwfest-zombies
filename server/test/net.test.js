@@ -1,6 +1,6 @@
 const test = require('node:test'), assert = require('node:assert'), http = require('http'); const WebSocket = require('ws'); const { createServer, allowedOrigins, secureResponse } = require('../index.js');
 let S, port; test.before(async () => { S = createServer({ origins: ['http://ok.test'] }); port = await S.listen(0); }); test.after(() => S.close());
-const open = (origin = 'http://ok.test') => new Promise((res, rej) => { const ws = new WebSocket('ws://127.0.0.1:' + port, { origin }); const q = []; ws.on('message', (d) => q.push(JSON.parse(d))); ws.next = (t, ms = 3000) => new Promise((r2, j2) => { const st = Date.now(); const iv = setInterval(() => { const i = q.findIndex((m) => m.t === t); if (i >= 0) { clearInterval(iv); r2(q.splice(i, 1)[0]); } else if (Date.now() - st > ms) { clearInterval(iv); j2(new Error('timeout ' + t)); } }, 10); }); ws.on('open', () => res(ws)); ws.on('error', rej); ws.on('unexpected-response', (_, r) => rej(new Error('HTTP ' + r.statusCode))); });
+const open = (origin = 'http://ok.test') => new Promise((res, rej) => { const ws = new WebSocket('ws://127.0.0.1:' + port, { origin }); const q = []; ws.on('message', (d) => q.push(JSON.parse(d))); ws.next = (t, ms = 3000) => new Promise((r2, j2) => { const st = Date.now(); const iv = setInterval(() => { const i = q.findIndex((m) => m.t === t); if (i >= 0) { clearInterval(iv); r2(q.splice(i, 1)[0]); } else if (Date.now() - st > ms) { clearInterval(iv); j2(new Error('timeout ' + t)); } }, 10); }); ws.until = (pred, ms = 4000) => new Promise((r2, j2) => { const st = Date.now(); const iv = setInterval(() => { const i = q.findIndex(pred); if (i >= 0) { clearInterval(iv); r2(q.splice(i, 1)[0]); } else if (Date.now() - st > ms) { clearInterval(iv); j2(new Error('timeout')); } }, 15); }); ws.last = (t) => { for (let i = q.length - 1; i >= 0; i--) if (q[i].t === t) return q[i]; return null; }; ws.on('open', () => res(ws)); ws.on('error', rej); ws.on('unexpected-response', (_, r) => rej(new Error('HTTP ' + r.statusCode))); });
 test('origin check rejects foreign sites', async () => { await assert.rejects(open('https://evil.example'), /403/); });
 test('production origin list drops localhost even if configured', () => { assert.deepEqual(allowedOrigins({ NODE_ENV: 'production', ALLOWED_ORIGINS: 'https://vwfest.github.io,http://localhost:8099,http://127.0.0.1:8099' }), ['https://vwfest.github.io']); });
 test('room code create + join, snapshots flow', async () => { const a = await open(); a.send(JSON.stringify({ t: 'join', create: true, name: 'A' })); const ja = await a.next('joined'); assert.match(ja.room, /^[A-Z2-9]{5}$/);
@@ -13,6 +13,23 @@ test('oversized payload is rejected', async () => { const a = await open(); cons
 test('dev hooks are refused unless DEV_HOOKS=1', async () => { const a = await open(); a.send(JSON.stringify({ t: 'join', create: true })); await a.next('joined'); const closed = new Promise((r) => a.on('close', (c) => r(c))); a.send(JSON.stringify({ t: 'dev', pts: 99999 })); assert.equal(await closed, 4003); });
 test('buy/door/crate requests are answered by the server (far from stations -> rejected)', async () => { const a = await open(); a.send(JSON.stringify({ t: 'join', name: 'Far' })); const j = await a.next('joined'); assert.equal(j.phase, 'wait');
   a.send(JSON.stringify({ t: 'door' })); const d = await a.next('act'); assert.equal(d.a, 'door'); assert.equal(d.ok, false); a.send(JSON.stringify({ t: 'buy', w: 'rifle' })); const b = await a.next('act'); assert.equal(b.why, 'far'); a.send(JSON.stringify({ t: 'crate' })); const c = await a.next('act'); assert.equal(c.why, 'far'); a.close(); });
+test('code room starts wave 1 only after every joined player is ready', async () => {
+  const a = await open(); a.send(JSON.stringify({ t: 'join', create: true, name: 'Ada' })); const ja = await a.next('joined'); assert.equal(ja.phase, 'lobby'); assert.match(ja.room, /^[A-Z2-9]{5}$/);
+  const b = await open(); b.send(JSON.stringify({ t: 'join', code: ja.room, name: 'Bea' })); const jb = await b.next('joined'); assert.equal(jb.room, ja.room); assert.equal(jb.phase, 'lobby');
+  const both = await a.until((m) => m.t === 's' && m.phase === 'lobby' && m.p.length === 2);
+  assert.equal(both.round, 0); assert.equal(both.z.length, 0); assert.ok(both.p.every((p) => p[13] === 0));
+  a.send(JSON.stringify({ t: 'ready', on: true }));
+  const one = await a.until((m) => m.t === 's' && m.p.some((p) => p[1] === 'Ada' && p[13] === 1) && m.p.some((p) => p[1] === 'Bea' && p[13] === 0));
+  assert.equal(one.phase, 'lobby'); assert.equal(one.round, 0);
+  await new Promise((r) => setTimeout(r, 400)); const held = a.last('s'); assert.equal(held.phase, 'lobby'); assert.equal(held.round, 0); assert.equal(held.z.length, 0);
+  b.send(JSON.stringify({ t: 'ready', on: true }));
+  const wave = await a.until((m) => m.t === 's' && m.round >= 1 && m.z.length > 0, 8000);
+  const waveB = await b.until((m) => m.t === 's' && m.round >= 1 && m.z.length > 0, 8000);
+  assert.equal(wave.phase, 'round'); assert.equal(wave.round, 1); assert.equal(wave.room, ja.room);
+  assert.equal(waveB.phase, 'round'); assert.equal(waveB.round, 1); assert.equal(waveB.room, ja.room);
+  assert.ok(wave.z.length > 0 && waveB.z.length > 0);
+  a.send(JSON.stringify({ t: 'leave' })); b.send(JSON.stringify({ t: 'leave' })); a.close(); b.close();
+});
 const SECURITY = {
   'strict-transport-security': 'max-age=31536000; includeSubDomains',
   'x-content-type-options': 'nosniff',
