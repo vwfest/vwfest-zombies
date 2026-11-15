@@ -182,8 +182,8 @@ body.nofs .fsbtn{display:none!important}
 .coop{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;margin-top:10px}.coop .k{font-size:11px;letter-spacing:.24em;color:#a6b6bf;font-weight:800}.coop em{color:var(--amb);font-style:normal}
 .coop input{background:rgba(0,0,0,.35);border:1px solid var(--bd);border-radius:10px;color:#fff;padding:9px 10px;font:700 14px var(--f);width:120px;-webkit-user-select:text;user-select:text}#coCode{width:84px;text-transform:uppercase;letter-spacing:.2em}
 .coMsg{min-height:16px;margin:4px 0 0;font-size:12px;color:var(--amb)}
-#lobby{z-index:24}#lobby h2{letter-spacing:.28em;margin:6px 0}#lobbyRoster{list-style:none;margin:8px auto;padding:0;max-width:320px;text-align:left}#lobbyRoster li{padding:4px 0;font-weight:700}#lobbyRoster .ok{color:var(--acc)}#lobbyRoster .wait{color:#9fb0ba}#lobby .primary{padding:12px 28px;letter-spacing:.18em}
-@media (max-height:520px){#lobby .panel{padding:10px 14px}#lobby .tag{font-size:12px;margin:4px auto}#lobby h2{font-size:28px}}
+#lobby{z-index:24}#lobby h2{letter-spacing:.28em;margin:6px 0}#lobbyCount{margin:0 0 4px;font-size:22px;font-weight:900;letter-spacing:.14em;color:var(--acc)}#lobbyRoster{list-style:none;margin:8px auto;padding:0;max-width:320px;text-align:left}#lobbyRoster li{padding:4px 0;font-weight:700}#lobbyRoster .ok{color:var(--acc)}#lobbyRoster .wait{color:#9fb0ba}#lobby .primary{padding:12px 28px;letter-spacing:.18em}
+@media (max-height:520px){#lobby .panel{padding:10px 14px}#lobby .tag{font-size:12px;margin:4px auto}#lobby h2{font-size:28px}#lobbyCount{font-size:16px;margin:0}}
 #mpTag{left:50%;top:10px;transform:translateX(-50%);padding:4px 12px;font-size:11px;letter-spacing:.2em;font-weight:800;color:var(--acc)}
 #mission{left:50%;top:42px;transform:translateX(-50%);min-width:210px;max-width:72vw;padding:7px 12px 8px;text-align:left;pointer-events:none;z-index:5}
 #mission .msTop{display:flex;justify-content:space-between;gap:14px;align-items:baseline}
