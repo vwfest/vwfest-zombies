@@ -46,6 +46,29 @@ test('blood bait lures a zombie, then the blast kills only the pack on it', () =
   assert.equal(r.zombies.has(2), true);
 });
 
+test('a bait blast that kills the last zombie clears the wave and starts the mission', () => {
+  const r = new Room('G'); const p = r.addPlayer('a'); p.god = true; p.x = 0; p.z = 12;
+  r.phase = 'round'; r.round = 1; r.toSpawn = 0; r.interT = 99;
+  r.zombies.set(1, { id: 1, x: 0, z: 8, yaw: 0, state: 'chase', scale: 1, speed: 4, hp: 80, dmg: 0, value: 60, t: 0, cool: 9, v: 0, win: r.wins[0], slot: 0 });
+  r.nades.set(1, { id: 1, x: 0, y: 0.16, z: 8, vx: 0, vy: 0, vz: 0, fuse: 0, landed: true, by: 'a' });
+  r.step(0.05);
+  assert.equal(r.zombies.size, 0);
+  assert.equal(r.phase, 'inter');
+  assert.equal(r.missions.job && r.missions.job.id, 'fuel');
+});
+
+test('a last-zombie bait blast still starts the mission if it also downs the player', () => {
+  const r = new Room('G'); const p = r.addPlayer('a'); p.hp = 10; p.x = 0; p.z = 8;
+  r.phase = 'round'; r.round = 1; r.toSpawn = 0; r.interT = 99;
+  r.zombies.set(1, { id: 1, x: 0, z: 8, yaw: 0, state: 'chase', scale: 1, speed: 4, hp: 80, dmg: 0, value: 60, t: 0, cool: 9, v: 0, win: r.wins[0], slot: 0 });
+  r.nades.set(1, { id: 1, x: 0, y: 0.16, z: 8, vx: 0, vy: 0, vz: 0, fuse: 0, landed: true, by: 'a' });
+  r.step(0.05);
+  assert.equal(r.over, false);
+  assert.equal(r.phase, 'inter');
+  assert.equal(r.missions.job && r.missions.job.id, 'fuel');
+  assert.equal(p.dead, false);
+});
+
 test('a completed wave unlocks the next mission and never back to back', () => {
   const r = new Room('S'); r.addPlayer('a'); r.phase = 'round'; r.round = 1;
   assert.equal(r.missions.onWave(1), true);
