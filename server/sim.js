@@ -198,11 +198,11 @@ class Room {
       if (W.perShell) { ammo.mag++; ammo.res--; p.reloading = ammo.mag < W.mag && ammo.res > 0 ? { w: rel.w, t: W.reload, perShell: true } : null; }
       else { const n = Math.min(W.mag - ammo.mag, ammo.res); ammo.mag += n; ammo.res -= n; p.reloading = null; }
     }
+    this.stepNades(dt);
     if (this.phase === 'wait' || this.phase === 'inter') { this.interT -= dt; if (this.interT <= 0) this.startRound(this.round + 1); }
     else if (this.phase === 'round') { if (this.toSpawn > 0) { this.spawnT -= dt; if (this.spawnT <= 0 && this.zombies.size < this.cap) { this.spawn(); this.spawnT = Math.max(0.3, 2.0 - this.round * 0.13) / Math.max(1, this.size * 0.75); } }
       if (this.toSpawn <= 0 && this.zombies.size === 0) { const cleared = this.round; this.phase = 'inter'; this.interT = 8; this.missions.onWave(cleared); for (const p of this.players.values()) if (p.dead) { p.dead = false; p.hp = PLAYER_HP / 2; this.events.push({ e: 'revive', p: p.id }); } } }
     for (const w of this.wins) if (w.cool > 0) w.cool -= dt;
-    this.stepNades(dt);
     for (const z of this.zombies.values()) {
       z.t += dt; z.atk = 0; const w = z.win;
       if (z.state === 'approach') { const tx = w.out.x + w.t.x * z.slot, tz = w.out.z + w.t.z * z.slot, dx = tx - z.x, dz = tz - z.z, d = Math.hypot(dx, dz); if (d < 0.3) { z.state = w.count > 0 ? 'breach' : 'climb'; z.t = 0; z.cool = 0.6 + this.rng(); } else { const s = Math.min(d, z.speed * dt); z.x += dx / d * s; z.z += dz / d * s; z.yaw = Math.atan2(dx, dz); } }
