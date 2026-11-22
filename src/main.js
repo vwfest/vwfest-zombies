@@ -390,6 +390,10 @@ function gameOver() {
 const menuPlayer = { x: 0, z: 8 };
 const cbs = { groan: (z, d) => sfx.groan(pan(z.pos), clamp(1 - d / 40, 0.1, 0.8) * 0.8, z.brute ? 0.6 : z.runner ? 1.25 : rnd(0.9, 1.1), z.brute ? 1.4 : rnd(0.8, 1.3)), plank: (w, br) => { sfx.plank(true); fx.dust(new THREE.Vector3(w.c.x + w.n.x * 0.3, 1.4, w.c.z + w.n.z * 0.3), w.n, 6, [0.5, 0.4, 0.3]); }, hitPlayer };
 const cbsMenu = { groan: () => {}, plank: () => {}, hitPlayer: () => {} };
+function endWaveIfClear() {
+  if (MP?.on || G.phase !== 'round' || G.toSpawn > 0 || zombies.alive > 0) return;
+  const cleared = G.round; G.phase = 'inter'; G.interT = MODE.inter; sfx.setMusicPhase('calm'); if (missions) missions.onWave(cleared);
+}
 function tick(dt) {
   G.time += dt; const t = G.time;
   if (G.state === 'menu') {
@@ -401,8 +405,9 @@ function tick(dt) {
   if (G.state === 'paused') return;
   if (G.state === 'over') { fx.update(dt); return; }
   G.runTime += dt;
+  if (!MP?.on) grenades.step(dt);
   if (P.dead) {
-    P.deadT += dt; if (MP?.on) MP.update(dt, t, cbs); else zombies.update(dt, t, P, world.door, { ...cbs, hitPlayer: () => {} }); world.update(dt, t, P); fx.update(dt); updateCamera(dt, t); if (MP?.on && P.deadT > 0.8) { const who = MP.spectate(cam); gunRoot.visible = false; $('specTag').textContent = who ? 'DOWN · SPECTATING ' + who : 'DOWN · waiting for the round to end'; $('specTag').classList.remove('hidden'); } if (P.deadT > 2.4 && !MP?.on) gameOver(); return;
+    P.deadT += dt; if (MP?.on) MP.update(dt, t, cbs); else zombies.update(dt, t, P, world.door, { ...cbs, hitPlayer: () => {} }); world.update(dt, t, P); fx.update(dt); updateCamera(dt, t); endWaveIfClear(); if (MP?.on && P.deadT > 0.8) { const who = MP.spectate(cam); gunRoot.visible = false; $('specTag').textContent = who ? 'DOWN · SPECTATING ' + who : 'DOWN · waiting for the round to end'; $('specTag').classList.remove('hidden'); } if (P.deadT > 2.4 && !MP?.on) gameOver(); return;
   }
   movePlayer(dt); updateWeapons(dt);
   // regen
@@ -411,10 +416,10 @@ function tick(dt) {
   // rounds
   if (MP?.on) MP.update(dt, t, cbs);
   else if (G.phase === 'wait') { G.interT -= dt; if (G.interT <= 0) startRound(1); }
-  else if (G.phase === 'round') { trySpawn(dt); if (G.toSpawn <= 0 && zombies.alive <= 0) { const cleared = G.round; G.phase = 'inter'; G.interT = MODE.inter; sfx.setMusicPhase('calm'); if (!MP?.on && missions) missions.onWave(cleared); } }
+  else if (G.phase === 'round') { trySpawn(dt); endWaveIfClear(); }
   else if (G.phase === 'inter') { G.interT -= dt; if (G.interT <= 0) startRound(G.round + 1); }
   if (G.state === 'playing') { const mood = G.phase === 'round' ? 'hot' : 'calm'; if (sfx.musicMood !== mood) sfx.setMusicPhase(mood); sfx.pumpMusic(); }
-  if (!MP?.on) { grenades.step(dt); zombies.update(dt, t, P, world.door, cbs); missions.update(dt); } else if (MP.S && MP.S.snaps && MP.S.snaps.length) { const last = MP.S.snaps[MP.S.snaps.length - 1]; grenades.sync(last.ng); grenades.interp(MP.frameAt?.(performance.now())); const me = last.p && last.p.find((p) => p[0] === MP.S.id); if (me && me.length > 15 && G.nadeCd <= 0) P.nades = me[15]; }
+  if (!MP?.on) { zombies.update(dt, t, P, world.door, cbs); missions.update(dt); } else if (MP.S && MP.S.snaps && MP.S.snaps.length) { const last = MP.S.snaps[MP.S.snaps.length - 1]; grenades.sync(last.ng); grenades.interp(MP.frameAt?.(performance.now())); const me = last.p && last.p.find((p) => p[0] === MP.S.id); if (me && me.length > 15 && G.nadeCd <= 0) P.nades = me[15]; }
   grenades.frame(); if (G.nadeCd > 0) G.nadeCd -= dt;
   world.update(dt, t, P); minimap(dt); if (missions) missions.frame(cam); if (voice && voice.joined) voice.tick();
   motes.center = { x: P.x, z: P.z }; mist.center = motes.center; motes.ps.update(dt); mist.ps.update(dt); fx.update(dt); updateCrate(dt);
